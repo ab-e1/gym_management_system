@@ -1,0 +1,14 @@
+{
+  "name": "gym_management_system",
+  "module": "server.js",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
