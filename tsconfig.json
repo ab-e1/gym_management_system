@@ -13,7 +13,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["@types/bun"]
+    "types": ["@types/bun"],
+    "allowImportingTsExtensions": true
   }
 }
-
