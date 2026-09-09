@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
-
+import { auth } from "./config/auth.ts";
 const app = new Hono();
 
 app.use("*", logger());
@@ -9,7 +9,13 @@ app.get("/health", (c) => {
   return c.json({ ok: true, uptime: process.uptime() });
 });
 
-// erros handeling
+app.all("/api/v1/auth/*", (c) => {
+  return auth.handler(c.req.raw);
+});
+
+// error handeling
+//
+//
 //
 app.onError((err, c) => {
   console.log(err);
