@@ -30,10 +30,12 @@ export const users = p.pgTable(
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
     name: p.text("name").notNull(),
-    phone: p.text("phone").notNull().unique(),
+    phoneNumber: p.text("phone").unique(),
     email: p.text("email").unique(),
     photoUrl: p.text("photo_url"),
     role: roleEnum("role").default("member").notNull(),
+    phoneNumberVerified: p.boolean("phone_verified").default(false).notNull(),
+    emailVerified: p.boolean("email_verified").default(false).notNull(),
     status: userStatusEnum("status").default("active").notNull(),
     isDeleted: p.boolean("is_deleted").default(false).notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
@@ -124,4 +126,81 @@ export const notificationLog = p.pgTable(
       .index("notification_log_dedupe_idx")
       .on(table.membershipId, table.type, table.sentAt),
   ],
+);
+// ─────────────────────────────────────────────
+// BETTER AUTH TABLES
+// ─────────────────────────────────────────────
+
+// 7. SESSION TABLE
+// Tracks active staff/owner tablet logins.
+// id is text (Better Auth generated internal ID). userId is uuid referencing users.id.
+export const sessions = p.pgTable(
+  "sessions",
+  {
+    id: p.text("id").primaryKey(),
+    userId: p
+      .uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: p.text("token").notNull().unique(),
+    expiresAt: p.timestamp("expires_at").notNull(),
+    ipAddress: p.text("ip_address"),
+    userAgent: p.text("user_agent"),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [p.index("session_user_id_idx").on(table.userId)],
+);
+
+// 8. ACCOUNT TABLE
+// Stores hashed passwords and OAuth provider credentials.
+// Includes access/refresh tokens for potential future OAuth integrations (Google, etc).
+export const accounts = p.pgTable(
+  "accounts",
+  {
+    id: p.text("id").primaryKey(),
+    userId: p
+      .uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: p.text("account_id").notNull(),
+    providerId: p.text("provider_id").notNull(),
+    accessToken: p.text("access_token"),
+    refreshToken: p.text("refresh_token"),
+    idToken: p.text("id_token"),
+    accessTokenExpiresAt: p.timestamp("access_token_expires_at"),
+    refreshTokenExpiresAt: p.timestamp("refresh_token_expires_at"),
+    scope: p.text("scope"),
+    password: p.text("password"),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [p.index("account_user_id_idx").on(table.userId)],
+);
+
+// 9. VERIFICATION TABLE
+// Stores SMS OTP codes and email verification tokens.
+// Uses "identifier" (phone number or email) instead of userId
+// because the user may not be logged in yet when requesting an OTP.
+export const verifications = p.pgTable(
+  "verifications",
+  {
+    id: p.text("id").primaryKey(),
+    identifier: p.text("identifier").notNull(),
+    value: p.text("value").notNull(),
+    expiresAt: p.timestamp("expires_at").notNull(),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [p.index("verification_identifier_idx").on(table.identifier)],
 );
