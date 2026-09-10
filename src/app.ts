@@ -35,7 +35,7 @@ app.notFound((c) => {
     {
       error: {
         code: "NOT_FOUND",
-        message: `Path${c.req.path} not not found`,
+        message: `Path ${c.req.path} not not found`,
       },
     },
     404,
