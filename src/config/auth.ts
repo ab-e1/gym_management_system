@@ -1,21 +1,31 @@
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { connection } from "./connection.ts";
 import { phoneNumber } from "better-auth/plugins";
 import * as schema from "../db/schema.ts";
 import { betterAuthSecret, betterAuthUrl } from "./env.ts";
 
 export const auth = betterAuth({
+  basePath: "/api/v1/auth",
   database: drizzleAdapter(connection, {
     provider: "pg",
-    schema: {
-      ...schema,
-    },
+    usePlural: true,
+    schema,
   }),
+  user: {
+    fields: {
+      image: "photoUrl",
+    },
+  },
+  advanced: {
+    database: {
+      generateId: false,
+    },
+  },
   plugins: [
     phoneNumber({
       sendOTP: async ({ phoneNumber, code }) => {
-        console.log(`[SMS OTP] Send code ${code} to ${phoneNumber} `);
+        console.log(`[SMS OTP] Send code ${code} to ${phoneNumber}`);
       },
     }),
   ],
