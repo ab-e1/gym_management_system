@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { planSchema } from "../../schema/plan.schema";
+import { planSchema } from "../../../schema/plan.schema.ts";
 
 describe("plan Zod schema validation", () => {
   test("should pass with valid plan data", () => {
