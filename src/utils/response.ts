@@ -4,8 +4,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 export const success = <T>(
   c: Context,
   data: T,
-  message?: string,
   statusCode: ContentfulStatusCode = 200,
+  message?: string,
 ) => {
   return c.json(
     {
