@@ -1,10 +1,10 @@
 // okay s for the uth middle ware we need to have two function, one that checks the token .
 
-import { Context } from "hono";
-import type { Next } from "hono";
+import type { Context, Next } from "hono";
 import { auth } from "../config/auth.ts";
 import { createMiddleware } from "hono/factory";
 import { failure } from "../utils/response.ts";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 // and one for required roles that checks required roles
 
@@ -22,7 +22,11 @@ export const requiredAuth = createMiddleware<Env>(
     });
 
     if (!session) {
-      return failure(c, "UN_AUTHORIZED", "session doesn't exist ", 401);
+      return failure(
+        c,
+        { code: "UN_AUTHORIZED", message: "session doesn't exist" },
+        401 as ContentfulStatusCode,
+      );
     }
 
     c.set("user", session.user);
@@ -39,15 +43,21 @@ export const requiredRole = (
     const user = c.get("user");
 
     if (!user) {
-      return failure(c, "UN_AUTHORIZED", "no user exist using a session", 401);
+      return failure(
+        c,
+        { code: "UN_AUTHORIZED", message: " no user exist using a session" },
+        401 as ContentfulStatusCode,
+      );
     }
 
     if (!allowedRoles.includes(user.role)) {
       return failure(
         c,
-        "UN_AUTHORIZED",
-        `role requires ${allowedRoles.join(", ")} `,
-        403,
+        {
+          code: "UN_AUTHORIZED",
+          message: `role requires ${allowedRoles.join(", ")} `,
+        },
+        403 as ContentfulStatusCode,
       );
     }
 
