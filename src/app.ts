@@ -13,6 +13,7 @@ app.all("/api/v1/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
+
 // error handeling
 //
 //
@@ -21,6 +22,7 @@ app.onError((err, c) => {
   console.log(err);
   return c.json(
     {
+      ok: false,
       error: {
         code: "INTERNAL_SERVER_ERROR",
         message: err.message || "Internal server error",
@@ -34,6 +36,7 @@ app.notFound((c) => {
   return c.json(
     {
       error: {
+        ok: false,
         code: "NOT_FOUND",
         message: `Path ${c.req.path} not not found`,
       },
