@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { planSchema } from "../../../schema/plan.schema.ts";
+import { planSchema, updatePlanSchema } from "../../../schema/plan.schema.ts";
 
 describe("plan Zod schema validation", () => {
   test("should pass with valid plan data", () => {
@@ -68,6 +68,35 @@ describe("plan Zod schema validation", () => {
       duration: 0,
     };
     const result = planSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  test("updateschema should pass if provided with only valid price", () => {
+    const input = {
+      price: 20,
+    };
+    const result = updatePlanSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  test("updateplanschema should pass if provided with only valid name", () => {
+    const input = {
+      name: "tori plan",
+    };
+    const result = updatePlanSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  test("updatePlanschema should pass if provided with only valid duration", () => {
+    const input = {
+      duration: 30,
+    };
+    const result = updatePlanSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+  test("updatePlanSchema should fail if provided with no data", () => {
+    const input = {};
+    const result = updatePlanSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
 });
