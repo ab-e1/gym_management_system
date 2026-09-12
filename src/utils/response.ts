@@ -19,19 +19,17 @@ export const success = <T>(
 
 export const failure = (
   c: Context,
-  code: string,
-  message: string,
+  error: {
+    code: string;
+    message: string;
+    description?: string;
+  },
   statusCode: ContentfulStatusCode = 400,
-  description?: string,
 ) => {
   return c.json(
     {
       ok: false,
-      error: {
-        code,
-        message,
-        ...(description && { description }),
-      },
+      error,
     },
     statusCode,
   );
