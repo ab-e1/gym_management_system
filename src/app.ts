@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { auth } from "./config/auth.ts";
+import planRoute from "./routes/plan.route.ts";
 const app = new Hono();
 
 app.use("*", logger());
@@ -13,6 +14,7 @@ app.all("/api/v1/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
+app.route("/api/v1/plans", planRoute);
 
 // error handeling
 //
