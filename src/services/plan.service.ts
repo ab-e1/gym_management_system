@@ -1,3 +1,4 @@
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { connection } from "../config/connection.ts";
 import { membershipPlans } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
@@ -14,12 +15,12 @@ export const createPlan = async (data: {
 
   if (duplicate) {
     return {
-      ok: false,
+      ok: false as const,
       error: {
         code: "CONFLICT",
         message: "membership already exists",
       },
-      status: 409,
+      status: 409 as ContentfulStatusCode,
     };
   }
 
@@ -27,14 +28,18 @@ export const createPlan = async (data: {
     .insert(membershipPlans)
     .values(data)
     .returning();
-  return { ok: true, data: newPlan, status: 201 };
+  return {
+    ok: true as const,
+    data: newPlan,
+    status: 201 as ContentfulStatusCode,
+  };
 };
 
 export const getAllPlans = async () => {
   return {
-    ok: true,
-    data: await connection.select().from(membershipPlans),
-    status: 200,
+    ok: true as const,
+    data: (await connection.select().from(membershipPlans)) || null,
+    status: 200 as ContentfulStatusCode,
   };
 };
 
@@ -46,16 +51,16 @@ export const getPlanById = async (id: string) => {
 
   if (!plan) {
     return {
-      ok: false,
+      ok: false as const,
       error: {
         code: "NOT_FOUND",
         message: "no plan found with the given id",
       },
-      status: 404,
+      status: 404 as ContentfulStatusCode,
     };
   }
 
-  return { ok: true, data: plan, status: 200 };
+  return { ok: true as const, data: plan, status: 200 as ContentfulStatusCode };
 };
 
 export const updatePlan = async (
@@ -69,16 +74,16 @@ export const updatePlan = async (
     .returning();
   if (!plan) {
     return {
-      ok: false,
+      ok: false as const,
       error: {
         code: "NOT_FOUND",
         message: "no plan found with the given id",
       },
-      status: 404,
+      status: 404 as ContentfulStatusCode,
     };
   }
 
-  return { ok: true, data: plan, status: 200 };
+  return { ok: true as const, data: plan, status: 200 as ContentfulStatusCode };
 };
 
 export const deletePlan = async (id: string) => {
@@ -89,19 +94,19 @@ export const deletePlan = async (id: string) => {
 
   if (!deleted) {
     return {
-      ok: false,
+      ok: false as const,
       error: {
         code: "NOT_FOUND",
         message: "plan not found with the given id",
       },
-      status: 404,
+      status: 404 as ContentfulStatusCode,
     };
   }
 
   return {
-    ok: true,
+    ok: true as const,
     data: deleted,
     message: "successfully deletd membership plan",
-    status: 200,
+    status: 200 as ContentfulStatusCode,
   };
 };
