@@ -5,13 +5,17 @@ export const success = <T>(
   c: Context,
   data: T,
   statusCode: ContentfulStatusCode = 200,
-  message?: string,
+  options?: {
+    message?: string;
+    pagination?: Record<string, any>;
+  },
 ) => {
   return c.json(
     {
       ok: true,
       data,
-      ...(message && { message }),
+      ...(options?.pagination && { pagination: options.pagination }),
+      ...(options?.message && { message: options.message }),
     },
     statusCode,
   );
