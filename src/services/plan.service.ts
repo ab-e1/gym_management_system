@@ -1,7 +1,7 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { connection } from "../config/connection.ts";
 import { membershipPlans } from "../db/schema.ts";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 
 export const createPlan = async (data: {
   name: string;
@@ -35,10 +35,27 @@ export const createPlan = async (data: {
   };
 };
 
-export const getAllPlans = async () => {
+export const getAllPlans = async (page: number = 1, limit: number = 10) => {
+  const offset = (page - 1) * limit;
+  const [{ total }] = await connection
+    .select({ total: count() })
+    .from(membershipPlans);
+  const totalCount = Number(total);
+
+  const plan = await connection
+    .select()
+    .from(membershipPlans)
+    .limit(limit)
+    .offset(offset);
   return {
     ok: true as const,
-    data: (await connection.select().from(membershipPlans)) || null,
+    data: plan || null,
+    pagination: {
+      total: totalCount,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(totalCount / limit),
+    },
     status: 200 as ContentfulStatusCode,
   };
 };
@@ -106,7 +123,7 @@ export const deletePlan = async (id: string) => {
   return {
     ok: true as const,
     data: deleted,
-    message: "successfully deletd membership plan",
+    options: { message: "successfully deletd membership plan" },
     status: 200 as ContentfulStatusCode,
   };
 };
