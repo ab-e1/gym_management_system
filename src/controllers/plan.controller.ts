@@ -14,9 +14,14 @@ export const createPlan = async (c: Context) => {
 };
 
 export const getAllPlans = async (c: Context) => {
-  const result = await planServices.getAllPlans();
+  const page = Number(c.req.query("page")) || 1;
+  const limit = Number(c.req.query("limit")) || 10;
 
-  return success(c, result.data, result.status);
+  const result = await planServices.getAllPlans(page, limit);
+
+  return success(c, result.data, result.status, {
+    pagination: result.pagination,
+  });
 };
 
 export const getPlanById = async (c: Context) => {
