@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { connection } from "./connection.ts";
-import { phoneNumber } from "better-auth/plugins";
+import { phoneNumber, bearer } from "better-auth/plugins";
 import * as schema from "../db/schema.ts";
 import { betterAuthSecret, betterAuthUrl } from "./env.ts";
 
@@ -16,6 +16,12 @@ export const auth = betterAuth({
     fields: {
       image: "photoUrl",
     },
+    additionalFields: {
+      role: {
+        type: "string",
+        defaultValue: "member",
+      },
+    },
   },
   advanced: {
     database: {
@@ -23,6 +29,7 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    bearer(),
     phoneNumber({
       sendOTP: async ({ phoneNumber, code }) => {
         console.log(`[SMS OTP] Send code ${code} to ${phoneNumber}`);
