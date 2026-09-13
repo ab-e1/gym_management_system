@@ -622,4 +622,46 @@ describe("test for the whole plan route", () => {
     const body = (await res.json()) as any;
     expect(body.ok).toBe(false);
   });
+
+  test("GET /api/v1/plans?page=1&limit=2 - should return paginated plans and pagination metadata", async () => {
+    const testUser = await connection
+      .insert(users)
+      .values({
+        name: "staff pagination test",
+        email: "staff_page@email.com",
+        phoneNumber: "0988888888",
+        role: "staff",
+        phoneNumberVerified: true,
+        emailVerified: true,
+      })
+      .returning();
+
+    const [testSession] = await connection
+      .insert(sessions)
+      .values({
+        id: crypto.randomUUID(),
+        userId: testUser[0].id,
+        token: "test-staff-page-token",
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      })
+      .returning();
+
+    const res = await app.request("/api/v1/plans?page=1&limit=2", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${testSession.token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+
+    expect(body.ok).toBe(true);
+    expect(body.pagination).toBeDefined();
+    expect(body.pagination.page).toBe(1);
+    expect(body.pagination.limit).toBe(2);
+    expect(body.pagination.total).toBeGreaterThanOrEqual(1);
+    expect(body.pagination.totalPages).toBeDefined();
+    expect(body.data.length).toBeLessThanOrEqual(2);
+  });
 });
