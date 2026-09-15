@@ -104,3 +104,24 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Project Conventions & Architecture
+
+### Testing Command
+Always run integration & E2E tests with concurrency set to 1 to prevent PostgreSQL table lock timeouts:
+```sh
+bun test --maxConcurrency=1
+```
+
+### API Response Wrapper Standard
+All service functions return a consistent status wrapper:
+- **Success**: `{ ok: true, data: T, pagination?: { totalMembers, page, limit, totalPages }, status: ContentfulStatusCode }`
+- **Error**: `{ ok: false, error: { code: string, message: string }, status: ContentfulStatusCode }`
+
+### Drizzle Query Composition
+For dynamic query filtering, use the array composition pattern (`const conditions = [...]`) combined with `and(...conditions)` to preserve strict TypeScript type safety without non-null assertions (`!`).
+
+### Domain Architecture Boundaries
+- **User / Member CRUD**: `src/services/user.service.ts` (Member profiles, search, filtering, status updates).
+- **Authentication & Sessions**: Better Auth (`src/config/auth.ts`) handles login, logout, bearer tokens, and session validation.
+
