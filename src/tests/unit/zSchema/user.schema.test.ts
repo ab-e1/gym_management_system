@@ -48,4 +48,17 @@ describe("user schema unit test", () => {
     const result = createMemberSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  test("incoming valid phone number should be normalized to a +251 form successfully", () => {
+    const input = {
+      name: "test user",
+      phoneNumber: "0911223344",
+    };
+
+    const result = createMemberSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.phoneNumber).toBe("+251911223344");
+    }
+  });
 });
