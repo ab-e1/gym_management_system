@@ -39,7 +39,11 @@ export const users = p.pgTable(
     status: userStatusEnum("status").default("active").notNull(),
     isDeleted: p.boolean("is_deleted").default(false).notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
-    updatedAt: p.timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
   },
   (table) => [p.index("user_name_idx").on(table.name)],
 );
@@ -52,7 +56,11 @@ export const membershipPlans = p.pgTable(
     price: p.integer("price").notNull(),
     duration: p.integer("duration").notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
-    updatedAt: p.timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
     p.check("price_positive_check", sql`${table.price} > 0`),
@@ -77,7 +85,11 @@ export const memberships = p.pgTable(
     status: membershipStatusEnum("status").default("active").notNull(),
     lastNotifiedDay: p.timestamp("last_notified_day"),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
-    updatedAt: p.timestamp("updated_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
     p.index("memberships_user_id_idx").on(table.userId),
