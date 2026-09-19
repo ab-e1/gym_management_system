@@ -1,4 +1,5 @@
-export const normalizePhoneNumber = (phoneNumber: string) => {
+export const normalizePhoneNumber = (phoneNumber?: string) => {
+  if (!phoneNumber) return undefined;
   const cleaned = phoneNumber.trim().replace(/[\s-]/g, "");
 
   if (cleaned.startsWith("0")) {
