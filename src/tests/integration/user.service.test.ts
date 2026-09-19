@@ -5,6 +5,7 @@ import { users } from "../../db/schema.ts";
 
 describe("integration test for the user sevices", () => {
   let staffId: string;
+  let memberId: string;
 
   beforeAll(async () => {
     await connection.delete(users);
@@ -46,7 +47,7 @@ describe("integration test for the user sevices", () => {
       .insert(users)
       .values({
         name: "member test",
-        phoneNumber: "0911334444",
+        phoneNumber: "+251911334444",
         email: "member@email.com",
         role: "member",
       })
@@ -76,7 +77,7 @@ describe("integration test for the user sevices", () => {
       .insert(users)
       .values({
         name: "staff",
-        phoneNumber: "0911224444",
+        phoneNumber: "+251911224444",
         email: "staff@email.com",
         role: "staff",
       })
@@ -89,5 +90,107 @@ describe("integration test for the user sevices", () => {
     expect(result.ok).toBe(false);
     expect(result.error!.code).toBe("NOT_FOUND");
     expect(result.status).toBe(404);
+  });
+
+  test("getting all members with valid number should pass with 200", async () => {
+    const result = await userService.getAllMembers(1, 10, "0911334444");
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("getting all members with wrong or non existing filter still should pass with 200", async () => {
+    const result = await userService.getAllMembers(
+      1,
+      10,
+      "nonn existing filter",
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual([]);
+    expect(result.pagination.totalMembers).toBe(0);
+  });
+
+  test("updating member should pass with 200, and with avalid phone and email regex only", async () => {
+    const [testUser] = await connection
+      .insert(users)
+      .values({
+        name: "test user 1",
+        phoneNumber: "+251922334455",
+        email: "testUser1@email.com",
+        role: "member",
+      })
+      .returning();
+    memberId = testUser.id;
+    const result = await userService.updateMember(`${memberId}`, {
+      name: "updated test user 1",
+      phoneNumber: "+251933224455",
+      email: "updateduser@email.com",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.phoneNumber).toBe("+251933224455");
+      expect(result.status).toBe(200);
+      expect(result.data.name).toBe("updated test user 1");
+      expect(result.data.email).toBe("updateduser@email.com");
+    }
+  });
+
+  test("update member should fail if provided with invalid id", async () => {
+    const result = await userService.updateMember(
+      "00000000-0000-0000-0000-000000000000",
+      {
+        name: "updated test user 1",
+        phoneNumber: "+251988224455",
+        email: "updatinguser@email.com",
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(404);
+      expect(result.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  test("updating user should fail if the user is a staff", async () => {
+    const result = await userService.updateMember(`${staffId}`, {
+      name: "updated user",
+      phoneNumber: "+251911112266",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+      expect(result.status).toBe(404);
+    }
+  });
+
+  test("toggle should pass by changing isDeleted to true and false", async () => {
+    const [member] = await connection
+      .insert(users)
+      .values({
+        name: "test abebe",
+        phoneNumber: "+251988998877",
+        isDeleted: true,
+      })
+      .returning();
+    const deletedMemberId = member.id;
+    const result = await userService.deleteMemberToggle(`${deletedMemberId}`);
+
+    expect(result.ok).toBe(true);
+  });
+  test("if provided with invalid id, delete toggle should fail with 404", async () => {
+    const result = await userService.deleteMemberToggle(
+      "00000000-0000-0000-0000-000000000000",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("NOT_FOUND");
+      expect(result?.status).toBe(404);
+    }
   });
 });
