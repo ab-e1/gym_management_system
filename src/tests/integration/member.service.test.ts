@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
-import * as userService from "../../services/user.service.ts";
+import * as userService from "../../services/users/member.service.ts";
 import { users } from "../../db/schema.ts";
 
-describe("integration test for the user sevices", () => {
+describe("integration test for the member sevices", () => {
   let staffId: string;
   let memberId: string;
 
