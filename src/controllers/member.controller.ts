@@ -17,14 +17,14 @@ export const getMemberById = async (c: Context) => {
   const id = c.req.param("id");
 
   if (!id) {
-    return {
-      ok: false,
-      error: {
+    return failure(
+      c,
+      {
         code: "BAD_REQUEST",
         message: "member id is required",
       },
-      status: 400 as ContentfulStatusCode,
-    };
+      400 as ContentfulStatusCode,
+    );
   }
 
   const result = await memberServices.getMemberById(id);
@@ -49,14 +49,14 @@ export const updateMember = async (c: Context) => {
   const body = await c.req.json();
 
   if (!id) {
-    return {
-      ok: false,
-      error: {
+    return failure(
+      c,
+      {
         code: "BAD_REQUEST",
         message: "member id is required",
       },
-      status: 400 as ContentfulStatusCode,
-    };
+      400 as ContentfulStatusCode,
+    );
   }
 
   const result = await memberServices.updateMember(id, body);
@@ -70,14 +70,14 @@ export const updateMember = async (c: Context) => {
 export const deleteMemberToggle = async (c: Context) => {
   const id = c.req.param("id");
   if (!id) {
-    return {
-      ok: false,
-      error: {
+    return failure(
+      c,
+      {
         code: "BAD_REQUEST",
         message: "member id is required",
       },
-      status: 400 as ContentfulStatusCode,
-    };
+      400 as ContentfulStatusCode,
+    );
   }
   const result = await memberServices.deleteMemberToggle(id);
   if (!result.ok) {

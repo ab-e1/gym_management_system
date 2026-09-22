@@ -4,7 +4,7 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
-    "test": "bun test --maxConcurrency=1"
+    "test": "bun test"
   },
   "type": "module",
   "devDependencies": {

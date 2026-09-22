@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { auth } from "./config/auth.ts";
 import planRoute from "./routes/plan.route.ts";
+import memberRoute from "./routes/member.route.ts";
 const app = new Hono();
 
 app.use("*", logger());
@@ -15,6 +16,8 @@ app.all("/api/v1/auth/*", (c) => {
 });
 
 app.route("/api/v1/plans", planRoute);
+
+app.route("/api/v1/members", memberRoute);
 
 // error handeling
 //
