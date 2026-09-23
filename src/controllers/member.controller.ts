@@ -4,7 +4,7 @@ import { failure, success } from "../utils/response";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export const createMember = async (c: Context) => {
-  const body = await c.req.json();
+  const body = c.get("validData");
   const result = await memberServices.createMember(body);
 
   if (!result.ok) {

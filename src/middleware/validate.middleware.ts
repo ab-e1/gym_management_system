@@ -18,6 +18,7 @@ export const validate = (schema: ZodSchema) => {
         400 as ContentfulStatusCode,
       );
     }
+    c.set("validData", result.data);
     await next();
   };
 };
