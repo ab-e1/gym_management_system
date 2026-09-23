@@ -210,7 +210,9 @@ export const deleteMemberToggle = async (id: string) => {
       .where(eq(users.id, id));
     return {
       ok: true as const,
-      message: "member deleted successfully",
+      data: {
+        message: "member deleted successfully",
+      },
       status: 200 as ContentfulStatusCode,
     };
   } else {
@@ -220,7 +222,9 @@ export const deleteMemberToggle = async (id: string) => {
       .where(eq(users.id, id));
     return {
       ok: true as const,
-      message: "member recovered /undeleted successfully",
+      data: {
+        message: "member recovered /undeleted successfully",
+      },
       status: 200 as ContentfulStatusCode,
     };
   }
