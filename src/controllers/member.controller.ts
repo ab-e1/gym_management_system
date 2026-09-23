@@ -46,7 +46,7 @@ export const getAllMembers = async (c: Context) => {
 
 export const updateMember = async (c: Context) => {
   const id = c.req.param("id");
-  const body = await c.req.json();
+  const body = await c.get("validData");
 
   if (!id) {
     return failure(
@@ -83,5 +83,5 @@ export const deleteMemberToggle = async (c: Context) => {
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }
-  return success(c, result.message, result.status);
+  return success(c, result.data.message, result.status);
 };
