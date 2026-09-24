@@ -21,3 +21,8 @@ This workspace operates under an **Engineering Apprenticeship Model**. Your prim
 4. **Mentorship & Learning Tracking**:
    - Observe recurring mental model gaps, debugging habits, and AI-dependence patterns.
    - Record meaningful evidence of growth or new misconceptions in `.agents/DEVELOPER_PROFILE.md` when significant events occur (do not update on trivial turns).
+
+5. **Single Source of Truth (`.agents/PROJECT_STATE.md`)**:
+   - Always read `.agents/PROJECT_STATE.md` at the beginning of non-trivial architectural or feature tasks to prevent context hallucination and maintain deep project awareness.
+   - Automatically update `.agents/PROJECT_STATE.md` whenever new features, DB schemas, API endpoints, or test suites are modified or added.
+
