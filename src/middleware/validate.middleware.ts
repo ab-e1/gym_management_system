@@ -3,10 +3,14 @@ import type { ZodSchema } from "zod";
 import { failure } from "../utils/response.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-export const validate = (schema: ZodSchema) => {
+export const validate = (
+  schema: ZodSchema,
+  target: "body" | "query" = "body",
+) => {
   return async (c: Context, next: Next) => {
-    const body = await c.req.json().catch(() => ({}));
-    const result = schema.safeParse(body);
+    const input =
+      target === "query" ? c.req.query() : await c.req.json().catch(() => ({}));
+    const result = schema.safeParse(input);
 
     if (!result.success) {
       return failure(
@@ -22,3 +26,4 @@ export const validate = (schema: ZodSchema) => {
     await next();
   };
 };
+

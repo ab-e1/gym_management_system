@@ -664,4 +664,54 @@ describe("test for the whole plan route", () => {
     expect(body.pagination.totalPages).toBeDefined();
     expect(body.data.length).toBeLessThanOrEqual(2);
   });
+
+  test("POST /api/v1/plans - should fail with 409 conflict when creating duplicate plan name", async () => {
+    const testUser = await connection
+      .insert(users)
+      .values({
+        name: "owner duplicate plan test",
+        email: "owner_dup_plan@email.com",
+        phoneNumber: "0999112233",
+        role: "owner",
+        phoneNumberVerified: true,
+        emailVerified: true,
+      })
+      .returning();
+
+    const [testSession] = await connection
+      .insert(sessions)
+      .values({
+        id: crypto.randomUUID(),
+        userId: testUser[0].id,
+        token: "test-owner-dup-plan-token",
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      })
+      .returning();
+
+    await connection.insert(membershipPlans).values({
+      id: crypto.randomUUID(),
+      name: "VIP Premium Plan",
+      price: 10000,
+      duration: 30,
+    });
+
+    const res = await app.request("/api/v1/plans", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${testSession.token}`,
+      },
+      body: JSON.stringify({
+        name: "VIP Premium Plan",
+        price: 10000,
+        duration: 30,
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as any;
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("CONFLICT");
+  });
 });
+

@@ -5,42 +5,32 @@ import { validate } from "../middleware/validate.middleware.ts";
 import {
   createMemberSchema,
   updateMemberSchema,
+  paginationQuerySchema,
 } from "../schema/user.schema.ts";
 
 const memberRoute = new Hono();
 
-memberRoute.use("*", requiredAuth);
+memberRoute.use("*", requiredAuth, requiredRole("owner", "staff"));
 
 memberRoute.get(
   "/",
-  requiredAuth,
-  requiredRole("owner", "staff"),
+  validate(paginationQuerySchema, "query"),
   memberController.getAllMembers,
 );
-memberRoute.get(
-  "/:id",
-  requiredRole("owner", "staff"),
-  memberController.getMemberById,
-);
+memberRoute.get("/:id", memberController.getMemberById);
 
 memberRoute.post(
   "/",
-  requiredRole("owner", "staff"),
   validate(createMemberSchema),
   memberController.createMember,
 );
 
 memberRoute.patch(
   "/:id",
-  requiredRole("owner", "staff"),
   validate(updateMemberSchema),
   memberController.updateMember,
 );
 
-memberRoute.delete(
-  "/:id",
-  requiredRole("owner", "staff"),
-  memberController.deleteMemberToggle,
-);
+memberRoute.delete("/:id", memberController.deleteMemberToggle);
 
 export default memberRoute;

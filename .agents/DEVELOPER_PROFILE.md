@@ -57,9 +57,12 @@ This is a living, evidence-based record of engineering development for the Gym M
 ## 9. Evidence of Growth
 - **2026-09-14**: Successfully identified the architectural distinction between User Service (`user.service.ts`) and Auth Service (`auth.service.ts`).
 - **2026-09-14**: Transitioned from `let` re-assignment to the idiomatic Drizzle Array filtering pattern.
+- **2026-09-24**: Independently reasoned about PostgreSQL `UNIQUE` key constraints vs soft-deleted user reactivation (`createStaff` converting soft-deleted members to staff instead of triggering `23505` duplicate key errors).
+- **2026-09-24**: Articulated product-market fit requirements for Ethiopian market context (Phone-first identity, optional email, SMS/OTP workflow).
 
 ---
 
 ## 10. Next Recommended Challenges
-1. Implement `search` query parameter in `getAllMembers` using the Array filter pattern without type assertions (`!`).
-2. Implement `updateMember` and `deleteMember` using TDD.
+1. Implement Hono route handlers & controllers for Staff (`/api/v1/staff`) using `zValidator` and test with full E2E test suite.
+2. Transition to Phase 2: Lead Acquisition CRM Module (`leads` table schema + `convertLeadToMember` transaction).
+

@@ -6,12 +6,17 @@ import {
   createMemberSchema,
   updateMemberSchema,
 } from "../schema/user.schema.ts";
+import { paginationQuerySchema } from "../schema/plan.schema.ts";
 
 const staffRoute = new Hono();
 
-staffRoute.use(requiredAuth, requiredRole("owner"));
+staffRoute.use("*", requiredAuth, requiredRole("owner"));
 
-staffRoute.get("/", staffController.getAllStaff);
+staffRoute.get(
+  "/",
+  validate(paginationQuerySchema, "query"),
+  staffController.getAllStaff,
+);
 
 staffRoute.get("/:id", staffController.getStaffById);
 

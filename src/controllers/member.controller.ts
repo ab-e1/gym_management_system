@@ -35,13 +35,13 @@ export const getMemberById = async (c: Context) => {
 };
 
 export const getAllMembers = async (c: Context) => {
-  const page = Number(c.req.query("page"));
-  const limit = Number(c.req.query("limit"));
-  const search = c.req.query("search");
+  const { page, limit, search } = c.get("validData");
 
   const result = await memberServices.getAllMembers(page, limit, search);
 
-  return success(c, result.data, result.status);
+  return success(c, result.data, result.status, {
+    pagination: result.pagination,
+  });
 };
 
 export const updateMember = async (c: Context) => {
