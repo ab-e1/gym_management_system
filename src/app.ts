@@ -4,6 +4,8 @@ import { auth } from "./config/auth.ts";
 import planRoute from "./routes/plan.route.ts";
 import memberRoute from "./routes/member.route.ts";
 import staffRoute from "./routes/staff.route.ts";
+import { failure } from "./utils/response.ts";
+
 const app = new Hono();
 
 app.use("*", logger());
@@ -20,34 +22,27 @@ app.route("/api/v1/plans", planRoute);
 
 app.route("/api/v1/members", memberRoute);
 
-app.route("/api/v1/staff", staffRoute)
+app.route("/api/v1/staff", staffRoute);
 
-// error handeling
-//
-//
-//
+// error handling
 app.onError((err, c) => {
   console.log(err);
-  return c.json(
+  return failure(
+    c,
     {
-      ok: false,
-      error: {
-        code: "INTERNAL_SERVER_ERROR",
-        message: err.message || "Internal server error",
-      },
+      code: "INTERNAL_SERVER_ERROR",
+      message: err.message || "Internal server error",
     },
     500,
   );
 });
 
 app.notFound((c) => {
-  return c.json(
+  return failure(
+    c,
     {
-      error: {
-        ok: false,
-        code: "NOT_FOUND",
-        message: `Path ${c.req.path} not not found`,
-      },
+      code: "NOT_FOUND",
+      message: `Path ${c.req.path} not found`,
     },
     404,
   );
