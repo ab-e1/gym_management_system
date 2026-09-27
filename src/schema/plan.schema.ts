@@ -13,7 +13,4 @@ export const updatePlanSchema = planSchema
       "At least onefield(name, price, duration) must be provided to update",
   });
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().max(50).default(20),
-});
+export { paginationQuerySchema } from "./common.schema.ts";
