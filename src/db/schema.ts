@@ -29,6 +29,10 @@ export const users = p.pgTable(
   "users",
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
+      .notNull(),
     name: p.text("name").notNull(),
     phoneNumber: p.text("phone").unique(),
     email: p.text("email").unique(),
@@ -52,9 +56,14 @@ export const membershipPlans = p.pgTable(
   "membership_plans",
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
+      .notNull(),
     name: p.text("name").notNull(),
     price: p.integer("price").notNull(),
     duration: p.integer("duration").notNull(),
+    isDeleted: p.boolean("is_deleted").default(false).notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
     updatedAt: p
       .timestamp("updated_at")
@@ -76,6 +85,10 @@ export const memberships = p.pgTable(
       .uuid("user_id")
       .references(() => users.id)
       .notNull(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
+      .notNull(),
     planId: p
       .uuid("plan_id")
       .references(() => membershipPlans.id)
@@ -84,6 +97,7 @@ export const memberships = p.pgTable(
     endDate: p.timestamp("end_date").notNull(),
     status: membershipStatusEnum("status").default("active").notNull(),
     lastNotifiedDay: p.timestamp("last_notified_day"),
+    isDeleted: p.boolean("is_deleted").default(false).notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
     updatedAt: p
       .timestamp("updated_at")
@@ -101,9 +115,14 @@ export const payments = p.pgTable(
   "payments",
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
+
     membershipId: p
       .uuid("membership_id")
       .references(() => memberships.id)
+      .notNull(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
       .notNull(),
     amount: p.integer("amount").notNull(),
     paymentMethod: paymentMethodEnum("payment_method").notNull(),
@@ -128,6 +147,10 @@ export const notificationLog = p.pgTable(
       .uuid("membership_id")
       .references(() => memberships.id)
       .notNull(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
+      .notNull(),
     type: notificationTypeEnum("type").notNull(),
     channel: notificationChannelEnum("channel").notNull(),
     sentAt: p.timestamp("sent_at").defaultNow().notNull(),
@@ -139,6 +162,35 @@ export const notificationLog = p.pgTable(
       .on(table.membershipId, table.type, table.sentAt),
   ],
 );
+
+export const leads = p.pgTable("leads", {
+  id: p.uuid("id").primaryKey(),
+  gymId: p
+    .uuid("gym_id")
+    .references(() => gyms.id)
+    .notNull(),
+  name: p.text("name").notNull(),
+  phoneNumber: p.text("phone").notNull(),
+  email: p.text("email"),
+  createdAt: p.timestamp("created_at").defaultNow().notNull(),
+  updatedAt: p
+    .timestamp("updated_at")
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const gyms = p.pgTable("gyms", {
+  id: p.uuid("id").defaultRandom().primaryKey(),
+  name: p.text("name").notNull(),
+  slug: p.text("slug").notNull().unique(),
+  status: userStatusEnum("status").default("active").notNull(),
+  isDeleted: p.boolean("is_deleted").default(false).notNull(),
+  createdAt: p.timestamp("created_at").defaultNow().notNull(),
+  updatedAt: p
+    .timestamp("updated_at")
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 // ─────────────────────────────────────────────
 // BETTER AUTH TABLES
 // ─────────────────────────────────────────────
