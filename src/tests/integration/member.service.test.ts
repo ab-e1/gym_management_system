@@ -1,18 +1,30 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
 import * as userService from "../../services/users/member.service.ts";
-import { users } from "../../db/schema.ts";
+import { gyms, users } from "../../db/schema.ts";
 
 describe("integration test for the member sevices", () => {
   let staffId: string;
   let memberId: string;
+  let gymId: string;
 
   beforeAll(async () => {
     await connection.delete(users);
+    await connection.delete(gyms);
+
+    const [gymTest] = await connection
+      .insert(gyms)
+      .values({
+        name: "gym one test",
+        slug: "gym_one_test",
+      })
+      .returning();
+
+    gymId = gymTest.id;
   });
 
   test("creating member should pass when provided with a valid data", async () => {
-    const result = await userService.createMember({
+    const result = await userService.createMember(`${gymId}`, {
       name: "test user",
       phoneNumber: "+251911223344",
       email: "user@email.com",
@@ -23,7 +35,7 @@ describe("integration test for the member sevices", () => {
   });
 
   test("creating member should fail when given a duplicate data", async () => {
-    const result = await userService.createMember({
+    const result = await userService.createMember(`${gymId}`, {
       name: "test user",
       phoneNumber: "+251911223344",
       email: "user@email.com",
@@ -34,7 +46,7 @@ describe("integration test for the member sevices", () => {
   });
 
   test("getting all member should pass with 200, with pagination", async () => {
-    const result = await userService.getAllMembers(1, 20);
+    const result = await userService.getAllMembers(`${gymId}`, 1, 20);
     expect(result.ok).toBe(true);
     expect(result.status).toBe(200);
     expect(result.pagination).toBeDefined();
@@ -47,6 +59,7 @@ describe("integration test for the member sevices", () => {
       .insert(users)
       .values({
         name: "member test",
+        gymId: `${gymId}`,
         phoneNumber: "+251911334444",
         email: "member@email.com",
         role: "member",
@@ -55,7 +68,7 @@ describe("integration test for the member sevices", () => {
 
     staffId = newStaff.id;
 
-    const result = await userService.getMemberById(`${staffId}`);
+    const result = await userService.getMemberById(`${gymId}`, `${staffId}`);
 
     expect(result.ok).toBe(true);
     expect(result.data!.name).toBe("member test");
@@ -64,6 +77,7 @@ describe("integration test for the member sevices", () => {
 
   test("getting a user by id should fail if porvided a wrong user id with a 404", async () => {
     const result = await userService.getMemberById(
+      `${gymId}`,
       "00000000-0000-0000-0000-000000000000",
     );
 
@@ -77,6 +91,7 @@ describe("integration test for the member sevices", () => {
       .insert(users)
       .values({
         name: "staff",
+        gymId: `${gymId}`,
         phoneNumber: "+251911224444",
         email: "staff@email.com",
         role: "staff",
@@ -85,7 +100,7 @@ describe("integration test for the member sevices", () => {
 
     staffId = newStaff.id;
 
-    const result = await userService.getMemberById(`${staffId}`);
+    const result = await userService.getMemberById(`${gymId}`, `${staffId}`);
 
     expect(result.ok).toBe(false);
     expect(result.error!.code).toBe("NOT_FOUND");
@@ -93,7 +108,12 @@ describe("integration test for the member sevices", () => {
   });
 
   test("getting all members with valid number should pass with 200", async () => {
-    const result = await userService.getAllMembers(1, 10, "0911334444");
+    const result = await userService.getAllMembers(
+      `${gymId}`,
+      1,
+      10,
+      "0911334444",
+    );
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe(200);
@@ -102,6 +122,7 @@ describe("integration test for the member sevices", () => {
 
   test("getting all members with wrong or non existing filter still should pass with 200", async () => {
     const result = await userService.getAllMembers(
+      `${gymId}`,
       1,
       10,
       "nonn existing filter",
@@ -118,13 +139,14 @@ describe("integration test for the member sevices", () => {
       .insert(users)
       .values({
         name: "test user 1",
+        gymId: `${gymId}`,
         phoneNumber: "+251922334455",
         email: "testUser1@email.com",
         role: "member",
       })
       .returning();
     memberId = testUser.id;
-    const result = await userService.updateMember(`${memberId}`, {
+    const result = await userService.updateMember(`${gymId}`, `${memberId}`, {
       name: "updated test user 1",
       phoneNumber: "+251933224455",
       email: "updateduser@email.com",
@@ -141,6 +163,7 @@ describe("integration test for the member sevices", () => {
 
   test("update member should fail if provided with invalid id", async () => {
     const result = await userService.updateMember(
+      `${gymId}`,
       "00000000-0000-0000-0000-000000000000",
       {
         name: "updated test user 1",
@@ -157,7 +180,7 @@ describe("integration test for the member sevices", () => {
   });
 
   test("updating user should fail if the user is a staff", async () => {
-    const result = await userService.updateMember(`${staffId}`, {
+    const result = await userService.updateMember(`${gymId}`, `${staffId}`, {
       name: "updated user",
       phoneNumber: "+251911112266",
     });
@@ -173,17 +196,22 @@ describe("integration test for the member sevices", () => {
       .insert(users)
       .values({
         name: "test abebe",
+        gymId: `${gymId}`,
         phoneNumber: "+251988998877",
         isDeleted: true,
       })
       .returning();
     const deletedMemberId = member.id;
-    const result = await userService.deleteMemberToggle(`${deletedMemberId}`);
+    const result = await userService.deleteMemberToggle(
+      `${gymId}`,
+      `${deletedMemberId}`,
+    );
 
     expect(result.ok).toBe(true);
   });
   test("if provided with invalid id, delete toggle should fail with 404", async () => {
     const result = await userService.deleteMemberToggle(
+      `${gymId}`,
       "00000000-0000-0000-0000-000000000000",
     );
 

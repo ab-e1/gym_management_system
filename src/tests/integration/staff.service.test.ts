@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 
 import { connection } from "../../config/connection";
-import { users, sessions } from "../../db/schema";
+import { users, sessions, gyms } from "../../db/schema";
 import * as staffService from "../../services/users/staff.service.ts";
 
 describe("integration test for the staff services", () => {
@@ -14,15 +14,27 @@ describe("integration test for the staff services", () => {
   let testMember: any;
   let testMemberDeleted: any;
   let testOwner: any;
+  let gymId: string;
+  let testGymOne: any;
 
   beforeAll(async () => {
     await connection.delete(sessions);
     await connection.delete(users);
+    [testGymOne] = await connection
+      .insert(gyms)
+      .values({
+        name: "gym one testgym",
+        slug: "gyum-one-slug-testgym",
+      })
+      .returning();
+
+    gymId = testGymOne.id;
 
     [testMember] = await connection
       .insert(users)
       .values({
         name: "test member1",
+        gymId: `${gymId}`,
         phoneNumber: "+251922009977",
         role: "member",
       })
@@ -32,6 +44,7 @@ describe("integration test for the staff services", () => {
       .insert(users)
       .values({
         name: "test member already deleted",
+        gymId: `${gymId}`,
         phoneNumber: "+251900990088",
         role: "member",
         isDeleted: true,
@@ -42,6 +55,7 @@ describe("integration test for the staff services", () => {
       .insert(users)
       .values({
         name: "test staff1",
+        gymId: `${gymId}`,
         phoneNumber: "+251912321453",
         role: "staff",
       })
@@ -51,6 +65,7 @@ describe("integration test for the staff services", () => {
       .insert(users)
       .values({
         name: "test owner1",
+        gymId: `${gymId}`,
         phoneNumber: "+251944332288",
         role: "owner",
       })
@@ -59,7 +74,7 @@ describe("integration test for the staff services", () => {
 
   describe("createStaff", () => {
     test("creating staff should pass when provided with valid data", async () => {
-      const result = await staffService.createStaff({
+      const result = await staffService.createStaff(`${gymId}`, {
         name: "test staff 1",
         phoneNumber: "+251911223355",
       });
@@ -72,7 +87,7 @@ describe("integration test for the staff services", () => {
     });
 
     test("creating staff should fail if there is a duplicate active staff", async () => {
-      const result = await staffService.createStaff({
+      const result = await staffService.createStaff(`${gymId}`, {
         name: "test staff 2",
         phoneNumber: "+251911223355",
       });
@@ -84,7 +99,7 @@ describe("integration test for the staff services", () => {
     });
 
     test("creating staff should fail if phone is in use by an active member", async () => {
-      const result = await staffService.createStaff({
+      const result = await staffService.createStaff(`${gymId}`, {
         name: "test staff2",
         phoneNumber: testMember.phoneNumber,
       });
@@ -96,7 +111,7 @@ describe("integration test for the staff services", () => {
     });
 
     test("creating staff should pass and reactivate if a member was soft deleted", async () => {
-      const result = await staffService.createStaff({
+      const result = await staffService.createStaff(`${gymId}`, {
         name: "used to be a member",
         phoneNumber: testMemberDeleted.phoneNumber,
       });
@@ -112,7 +127,7 @@ describe("integration test for the staff services", () => {
 
   describe("getAllStaff", () => {
     test("getAllStaff should return a paginated list of staff members only", async () => {
-      const result = await staffService.getAllStaff(1, 10);
+      const result = await staffService.getAllStaff(`${gymId}`, 1, 10);
       expect(result.ok).toBe(true);
       expect(result.status).toBe(200);
       if (result.ok) {
@@ -125,7 +140,12 @@ describe("integration test for the staff services", () => {
     });
 
     test("getAllStaff should filter results by search query", async () => {
-      const result = await staffService.getAllStaff(1, 10, "test staff1");
+      const result = await staffService.getAllStaff(
+        `${gymId}`,
+        1,
+        10,
+        "test staff1",
+      );
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.data.length).toBe(1);
@@ -136,7 +156,7 @@ describe("integration test for the staff services", () => {
 
   describe("getStaffById", () => {
     test("getStaffById should return staff details for valid staff ID", async () => {
-      const result = await staffService.getStaffById(testStaff.id);
+      const result = await staffService.getStaffById(`${gymId}`, testStaff.id);
       expect(result.ok).toBe(true);
       expect(result.status).toBe(200);
       if (result.ok) {
@@ -146,7 +166,10 @@ describe("integration test for the staff services", () => {
     });
 
     test("getStaffById should fail with 404 for non-existent ID", async () => {
-      const result = await staffService.getStaffById("00000000-0000-0000-0000-000000000000");
+      const result = await staffService.getStaffById(
+        `${gymId}`,
+        "00000000-0000-0000-0000-000000000000",
+      );
       expect(result.ok).toBe(false);
       expect(result.status).toBe(404);
       if (!result.ok) {
@@ -155,7 +178,7 @@ describe("integration test for the staff services", () => {
     });
 
     test("getStaffById should fail with 404 if ID belongs to a non-staff user", async () => {
-      const result = await staffService.getStaffById(testOwner.id);
+      const result = await staffService.getStaffById(`${gymId}`, testOwner.id);
       expect(result.ok).toBe(false);
       expect(result.status).toBe(404);
       if (!result.ok) {
@@ -166,7 +189,7 @@ describe("integration test for the staff services", () => {
 
   describe("updateStaff", () => {
     test("updateStaff should update staff details successfully", async () => {
-      const result = await staffService.updateStaff(testStaff.id, {
+      const result = await staffService.updateStaff(`${gymId}`, testStaff.id, {
         name: "test staff1 updated",
       });
       expect(result.ok).toBe(true);
@@ -177,15 +200,19 @@ describe("integration test for the staff services", () => {
     });
 
     test("updateStaff should fail with 404 for non-existent staff ID", async () => {
-      const result = await staffService.updateStaff("00000000-0000-0000-0000-000000000000", {
-        name: "ghost staff",
-      });
+      const result = await staffService.updateStaff(
+        `${gymId}`,
+        "00000000-0000-0000-0000-000000000000",
+        {
+          name: "ghost staff",
+        },
+      );
       expect(result.ok).toBe(false);
       expect(result.status).toBe(404);
     });
 
     test("updateStaff should fail with 409 if updating to a phone number already in use", async () => {
-      const result = await staffService.updateStaff(testStaff.id, {
+      const result = await staffService.updateStaff(`${gymId}`, testStaff.id, {
         phoneNumber: testMember.phoneNumber,
       });
       expect(result.ok).toBe(false);
@@ -198,22 +225,30 @@ describe("integration test for the staff services", () => {
 
   describe("deleteStaffToggle", () => {
     test("deleteStaffToggle should soft delete active staff", async () => {
-      const result = await staffService.deleteStaffToggle(testStaff.id);
+      const result = await staffService.deleteStaffToggle(
+        `${gymId}`,
+        testStaff.id,
+      );
       expect(result.ok).toBe(true);
       expect(result.status).toBe(200);
     });
 
     test("deleteStaffToggle should recover soft deleted staff on second call", async () => {
-      const result = await staffService.deleteStaffToggle(testStaff.id);
+      const result = await staffService.deleteStaffToggle(
+        `${gymId}`,
+        testStaff.id,
+      );
       expect(result.ok).toBe(true);
       expect(result.status).toBe(200);
     });
 
     test("deleteStaffToggle should fail with 404 for non-existent staff ID", async () => {
-      const result = await staffService.deleteStaffToggle("00000000-0000-0000-0000-000000000000");
+      const result = await staffService.deleteStaffToggle(
+        `${gymId}`,
+        "00000000-0000-0000-0000-000000000000",
+      );
       expect(result.ok).toBe(false);
       expect(result.status).toBe(404);
     });
   });
 });
-
