@@ -4,15 +4,20 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq, and, count, or, ilike } from "drizzle-orm";
 import { normalizePhoneNumber } from "../../utils/helpers.ts";
 
-export const createStaff = async (data: {
-  name: string;
-  phoneNumber: string;
-  email?: string;
-}) => {
+export const createStaff = async (
+  gymId: string,
+  data: {
+    name: string;
+    phoneNumber: string;
+    email?: string;
+  },
+) => {
   const [duplicate] = await connection
     .select()
     .from(users)
-    .where(eq(users.phoneNumber, data.phoneNumber));
+    .where(
+      and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
+    );
 
   if (duplicate && duplicate.isDeleted) {
     const [changedStaff] = await connection
@@ -23,7 +28,7 @@ export const createStaff = async (data: {
         isDeleted: false,
         role: "staff",
       })
-      .where(eq(users.id, duplicate.id))
+      .where(and(eq(users.id, duplicate.id), eq(users.gymId, gymId)))
       .returning();
     return {
       ok: true as const,
@@ -47,6 +52,7 @@ export const createStaff = async (data: {
     .insert(users)
     .values({
       name: data.name,
+      gymId: gymId,
       phoneNumber: data.phoneNumber,
       email: data.email,
       role: "staff",
@@ -61,6 +67,7 @@ export const createStaff = async (data: {
 };
 
 export const getAllStaff = async (
+  gymId: string,
   page: number = 1,
   limit: number = 10,
   search?: string,
@@ -68,7 +75,13 @@ export const getAllStaff = async (
   const offset = (page - 1) * limit;
   const ethiopianPhoneRegex = /^(?:\+251|251|0)?[97]\d{8}$/;
 
-  let conditions = [and(eq(users.role, "staff"), eq(users.isDeleted, false))];
+  let conditions = [
+    and(
+      eq(users.role, "staff"),
+      eq(users.isDeleted, false),
+      eq(users.gymId, gymId),
+    ),
+  ];
 
   if (search) {
     const trimmed = search.trim();
@@ -113,7 +126,7 @@ export const getAllStaff = async (
   };
 };
 
-export const getStaffById = async (id: string) => {
+export const getStaffById = async (gymId: string, id: string) => {
   const [staff] = await connection
     .select()
     .from(users)
@@ -122,6 +135,7 @@ export const getStaffById = async (id: string) => {
         eq(users.id, id),
         eq(users.role, "staff"),
         eq(users.isDeleted, false),
+        eq(users.gymId, gymId),
       ),
     );
 
@@ -144,6 +158,7 @@ export const getStaffById = async (id: string) => {
 };
 
 export const updateStaff = async (
+  gymId: string,
   id: string,
   data: {
     name?: string;
@@ -160,6 +175,7 @@ export const updateStaff = async (
         eq(users.id, id),
         eq(users.role, "staff"),
         eq(users.isDeleted, false),
+        eq(users.gymId, gymId),
       ),
     );
 
@@ -178,7 +194,9 @@ export const updateStaff = async (
     const [duplicateNumber] = await connection
       .select()
       .from(users)
-      .where(eq(users.phoneNumber, data.phoneNumber));
+      .where(
+        and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
+      );
 
     if (duplicateNumber && duplicateNumber.id !== id) {
       return {
@@ -200,7 +218,9 @@ export const updateStaff = async (
       email: data.email?.toLowerCase(),
       status: data.status,
     })
-    .where(and(eq(users.id, id), eq(users.role, "staff")))
+    .where(
+      and(eq(users.id, id), eq(users.role, "staff"), eq(users.gymId, gymId)),
+    )
     .returning();
 
   return {
@@ -210,11 +230,13 @@ export const updateStaff = async (
   };
 };
 
-export const deleteStaffToggle = async (id: string) => {
+export const deleteStaffToggle = async (gymId: string, id: string) => {
   const [targetUser] = await connection
     .select()
     .from(users)
-    .where(and(eq(users.id, id), eq(users.role, "staff")));
+    .where(
+      and(eq(users.id, id), eq(users.role, "staff"), eq(users.gymId, gymId)),
+    );
 
   if (!targetUser) {
     return {
@@ -231,7 +253,7 @@ export const deleteStaffToggle = async (id: string) => {
   await connection
     .update(users)
     .set({ isDeleted: newDeleteState })
-    .where(eq(users.id, id));
+    .where(and(eq(users.id, id), eq(users.gymId, gymId)));
 
   return {
     ok: true as const,

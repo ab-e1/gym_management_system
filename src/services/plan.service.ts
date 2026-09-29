@@ -1,17 +1,47 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { connection } from "../config/connection.ts";
 import { membershipPlans } from "../db/schema.ts";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 
-export const createPlan = async (data: {
-  name: string;
-  price: number;
-  duration: number;
-}) => {
+export const createPlan = async (
+  gymId: string,
+  data: {
+    name: string;
+    price: number;
+    duration: number;
+  },
+) => {
   const [duplicate] = await connection
     .select()
     .from(membershipPlans)
-    .where(eq(membershipPlans.name, data.name));
+    .where(
+      and(
+        eq(membershipPlans.name, data.name),
+        eq(membershipPlans.gymId, gymId),
+      ),
+    );
+
+  if (duplicate && duplicate.isDeleted) {
+    const [reactivated] = await connection
+      .update(membershipPlans)
+      .set({
+        ...data,
+        isDeleted: false,
+      })
+      .where(
+        and(
+          eq(membershipPlans.id, duplicate.id),
+          eq(membershipPlans.gymId, gymId),
+        ),
+      )
+      .returning();
+
+    return {
+      ok: true as const,
+      data: reactivated,
+      status: 201 as ContentfulStatusCode,
+    };
+  }
 
   if (duplicate) {
     return {
@@ -26,7 +56,12 @@ export const createPlan = async (data: {
 
   const [newPlan] = await connection
     .insert(membershipPlans)
-    .values(data)
+    .values({
+      name: data.name,
+      gymId: gymId,
+      price: data.price,
+      duration: data.duration,
+    })
     .returning();
   return {
     ok: true as const,
@@ -35,21 +70,33 @@ export const createPlan = async (data: {
   };
 };
 
-export const getAllPlans = async (page: number = 1, limit: number = 10) => {
+export const getAllPlans = async (
+  gymId: string,
+  page: number = 1,
+  limit: number = 10,
+) => {
   const offset = (page - 1) * limit;
+  const condition = and(
+    eq(membershipPlans.isDeleted, false),
+    eq(membershipPlans.gymId, gymId),
+  );
+
   const [{ total }] = await connection
     .select({ total: count() })
-    .from(membershipPlans);
+    .from(membershipPlans)
+    .where(condition);
   const totalCount = Number(total);
 
   const plan = await connection
     .select()
     .from(membershipPlans)
+    .where(condition)
     .limit(limit)
     .offset(offset);
+
   return {
     ok: true as const,
-    data: plan || null,
+    data: plan || [],
     pagination: {
       total: totalCount,
       page: page,
@@ -60,11 +107,17 @@ export const getAllPlans = async (page: number = 1, limit: number = 10) => {
   };
 };
 
-export const getPlanById = async (id: string) => {
+export const getPlanById = async (gymId: string, id: string) => {
   const [plan] = await connection
     .select()
     .from(membershipPlans)
-    .where(eq(membershipPlans.id, id));
+    .where(
+      and(
+        eq(membershipPlans.id, id),
+        eq(membershipPlans.isDeleted, false),
+        eq(membershipPlans.gymId, gymId),
+      ),
+    );
 
   if (!plan) {
     return {
@@ -81,14 +134,22 @@ export const getPlanById = async (id: string) => {
 };
 
 export const updatePlan = async (
+  gymId: string,
   id: string,
   data: { name?: string; price?: number; duration?: number },
 ) => {
   const [plan] = await connection
     .update(membershipPlans)
     .set(data)
-    .where(eq(membershipPlans.id, id))
+    .where(
+      and(
+        eq(membershipPlans.id, id),
+        eq(membershipPlans.isDeleted, false),
+        eq(membershipPlans.gymId, gymId),
+      ),
+    )
     .returning();
+
   if (!plan) {
     return {
       ok: false as const,
@@ -103,13 +164,13 @@ export const updatePlan = async (
   return { ok: true as const, data: plan, status: 200 as ContentfulStatusCode };
 };
 
-export const deletePlan = async (id: string) => {
-  const [deleted] = await connection
-    .delete(membershipPlans)
-    .where(eq(membershipPlans.id, id))
-    .returning();
+export const deletePlan = async (gymId: string, id: string) => {
+  const [targetPlan] = await connection
+    .select()
+    .from(membershipPlans)
+    .where(and(eq(membershipPlans.id, id), eq(membershipPlans.gymId, gymId)));
 
-  if (!deleted) {
+  if (!targetPlan) {
     return {
       ok: false as const,
       error: {
@@ -120,10 +181,22 @@ export const deletePlan = async (id: string) => {
     };
   }
 
+  const newDeleteState = !targetPlan.isDeleted;
+
+  const [updatedPlan] = await connection
+    .update(membershipPlans)
+    .set({ isDeleted: newDeleteState })
+    .where(and(eq(membershipPlans.id, id), eq(membershipPlans.gymId, gymId)))
+    .returning();
+
   return {
     ok: true as const,
-    data: deleted,
-    options: { message: "successfully deletd membership plan" },
+    data: {
+      ...updatedPlan,
+      message: newDeleteState
+        ? "Plan soft-deleted successfully"
+        : "Plan recovered successfully",
+    },
     status: 200 as ContentfulStatusCode,
   };
 };

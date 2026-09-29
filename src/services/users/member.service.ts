@@ -4,15 +4,20 @@ import { users } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { normalizePhoneNumber } from "../../utils/helpers.ts";
 
-export const createMember = async (data: {
-  name: string;
-  phoneNumber: string;
-  email?: string;
-}) => {
+export const createMember = async (
+  gymId: string,
+  data: {
+    name: string;
+    phoneNumber: string;
+    email?: string;
+  },
+) => {
   const [duplicate] = await connection
     .select()
     .from(users)
-    .where(eq(users.phoneNumber, data.phoneNumber));
+    .where(
+      and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
+    );
   if (duplicate) {
     return {
       ok: false as const,
@@ -27,6 +32,7 @@ export const createMember = async (data: {
   const [newMember] = await connection
     .insert(users)
     .values({
+      gymId: gymId,
       name: data.name,
       phoneNumber: data.phoneNumber,
       email: data.email?.toLowerCase(),
@@ -42,6 +48,7 @@ export const createMember = async (data: {
 };
 
 export const getAllMembers = async (
+  gymId: string,
   page: number = 1,
   limit: number = 10,
   search?: string,
@@ -49,7 +56,10 @@ export const getAllMembers = async (
   const offset = (page - 1) * limit;
   const ethiopianPhoneRegex = /^(?:\+251|251|0)?[97]\d{8}$/;
 
-  let condtitions = [and(eq(users.role, "member"), eq(users.isDeleted, false))];
+  let conditions = [
+    and(eq(users.role, "member"), eq(users.isDeleted, false)),
+    eq(users.gymId, gymId),
+  ];
   // if there is a search queryed it is filtered with this
   if (search) {
     const trimmed = search.trim();
@@ -61,10 +71,10 @@ export const getAllMembers = async (
       ilike(users.email, `%${searchMember}%`),
     );
     if (searchCondition) {
-      condtitions.push(searchCondition);
+      conditions.push(searchCondition);
     }
   }
-  const filterCondition = and(...condtitions);
+  const filterCondition = and(...conditions);
 
   const [{ total }] = await connection
     .select({ total: count() })
@@ -91,11 +101,11 @@ export const getAllMembers = async (
   };
 };
 
-export const getMemberById = async (id: string) => {
+export const getMemberById = async (gymId: string, id: string) => {
   const [member] = await connection
     .select()
     .from(users)
-    .where(eq(users.id, id));
+    .where(and(eq(users.id, id), eq(users.gymId, gymId)));
 
   if (!member) {
     return {
@@ -125,6 +135,7 @@ export const getMemberById = async (id: string) => {
 };
 
 export const updateMember = async (
+  gymId: string,
   id: string,
   data: {
     name?: string;
@@ -141,6 +152,7 @@ export const updateMember = async (
         eq(users.id, id),
         eq(users.role, "member"),
         eq(users.isDeleted, false),
+        eq(users.gymId, gymId),
       ),
     );
 
@@ -158,7 +170,9 @@ export const updateMember = async (
     const [duplicateNumber] = await connection
       .select()
       .from(users)
-      .where(eq(users.phoneNumber, data.phoneNumber));
+      .where(
+        and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
+      );
     if (duplicateNumber && duplicateNumber.id !== id) {
       return {
         ok: false as const,
@@ -178,7 +192,9 @@ export const updateMember = async (
       email: data.email?.toLowerCase(),
       status: data.status,
     })
-    .where(and(eq(users.id, id), eq(users.role, "member")))
+    .where(
+      and(eq(users.id, id), eq(users.role, "member"), eq(users.gymId, gymId)),
+    )
     .returning();
 
   return {
@@ -188,44 +204,39 @@ export const updateMember = async (
   };
 };
 
-export const deleteMemberToggle = async (id: string) => {
-  const [deleteChecker] = await connection
+export const deleteMemberToggle = async (gymId: string, id: string) => {
+  const [targetUser] = await connection
     .select()
     .from(users)
-    .where(eq(users.id, id));
-  if (!deleteChecker) {
+    .where(
+      and(eq(users.id, id), eq(users.role, "member"), eq(users.gymId, gymId)),
+    );
+
+  if (!targetUser) {
     return {
       ok: false as const,
       error: {
         code: "NOT_FOUND",
-        message: "member not found with that id",
+        message: "Member not found with the provided ID",
       },
       status: 404 as ContentfulStatusCode,
     };
   }
-  if (deleteChecker.isDeleted) {
-    await connection
-      .update(users)
-      .set({ isDeleted: false })
-      .where(eq(users.id, id));
-    return {
-      ok: true as const,
-      data: {
-        message: "member deleted successfully",
-      },
-      status: 200 as ContentfulStatusCode,
-    };
-  } else {
-    await connection
-      .update(users)
-      .set({ isDeleted: true })
-      .where(eq(users.id, id));
-    return {
-      ok: true as const,
-      data: {
-        message: "member recovered /undeleted successfully",
-      },
-      status: 200 as ContentfulStatusCode,
-    };
-  }
+
+  const newDeleteState = !targetUser.isDeleted;
+
+  await connection
+    .update(users)
+    .set({ isDeleted: newDeleteState })
+    .where(and(eq(users.id, id), eq(users.gymId, gymId)));
+
+  return {
+    ok: true as const,
+    data: {
+      message: newDeleteState
+        ? "Member soft-deleted successfully"
+        : "Member recovered successfully",
+    },
+    status: 200 as ContentfulStatusCode,
+  };
 };
