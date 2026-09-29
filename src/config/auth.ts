@@ -21,6 +21,10 @@ export const auth = betterAuth({
         type: "string",
         defaultValue: "member",
       },
+      gymId: {
+        type: "string",
+        required: true,
+      },
     },
   },
   advanced: {
