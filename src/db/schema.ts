@@ -34,7 +34,7 @@ export const users = p.pgTable(
       .references(() => gyms.id)
       .notNull(),
     name: p.text("name").notNull(),
-    phoneNumber: p.text("phone").unique(),
+    phoneNumber: p.text("phone").notNull(),
     email: p.text("email").unique(),
     photoUrl: p.text("photo_url"),
     role: roleEnum("role").default("member").notNull(),
@@ -49,7 +49,11 @@ export const users = p.pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [p.index("user_name_idx").on(table.name)],
+  (table) => [
+    p.index("user_name_idx").on(table.name),
+    p.index("user_gym_id_idx").on(table.gymId),
+    p.unique("user_phone_unique_per_gym").on(table.gymId, table.phoneNumber),
+  ],
 );
 
 export const membershipPlans = p.pgTable(
@@ -72,6 +76,7 @@ export const membershipPlans = p.pgTable(
       .notNull(),
   },
   (table) => [
+    p.index("membershipPlans_gym_id_idx").on(table.gymId),
     p.check("price_positive_check", sql`${table.price} > 0`),
     p.check("duration_postive_check", sql`${table.duration} > 0`),
   ],
@@ -106,6 +111,7 @@ export const memberships = p.pgTable(
       .notNull(),
   },
   (table) => [
+    p.index("memberships_gym_id_idx").on(table.gymId),
     p.index("memberships_user_id_idx").on(table.userId),
     p.index("memberships_end_date_status_idx").on(table.endDate, table.status),
   ],
@@ -134,6 +140,7 @@ export const payments = p.pgTable(
   },
   (table) => [
     p.index("payments_memberships_id_idx").on(table.membershipId),
+    p.index("payments_gym_id_idx").on(table.gymId),
     p.index("payments_paid_at_idx").on(table.paidAt),
     p.check("amount_positive_check", sql`${table.amount} > 0`),
   ],
@@ -157,27 +164,36 @@ export const notificationLog = p.pgTable(
     status: p.text("status").default("sent").notNull(),
   },
   (table) => [
+    p.index("notificationLog_gym_id_idx").on(table.gymId),
     p
       .index("notification_log_dedupe_idx")
       .on(table.membershipId, table.type, table.sentAt),
   ],
 );
 
-export const leads = p.pgTable("leads", {
-  id: p.uuid("id").primaryKey(),
-  gymId: p
-    .uuid("gym_id")
-    .references(() => gyms.id)
-    .notNull(),
-  name: p.text("name").notNull(),
-  phoneNumber: p.text("phone").notNull(),
-  email: p.text("email"),
-  createdAt: p.timestamp("created_at").defaultNow().notNull(),
-  updatedAt: p
-    .timestamp("updated_at")
-    .$onUpdate(() => new Date())
-    .notNull(),
-});
+export const leads = p.pgTable(
+  "leads",
+  {
+    id: p.uuid("id").defaultRandom().primaryKey(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id)
+      .notNull(),
+    name: p.text("name").notNull(),
+    phoneNumber: p.text("phone").notNull(),
+    email: p.text("email"),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+
+  (table) => [
+    p.index("leads_name_idx").on(table.name),
+    p.index("leads_gym_id_idx").on(table.gymId),
+  ],
+);
 
 export const gyms = p.pgTable("gyms", {
   id: p.uuid("id").defaultRandom().primaryKey(),
