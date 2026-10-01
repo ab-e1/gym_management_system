@@ -113,7 +113,17 @@ export const memberships = p.pgTable(
   (table) => [
     p.index("memberships_gym_id_idx").on(table.gymId),
     p.index("memberships_user_id_idx").on(table.userId),
-    p.index("memberships_end_date_status_idx").on(table.endDate, table.status),
+    p.index("memberships_auto_expire_idx").on(
+      table.gymId,
+      table.status,
+      table.endDate,
+    ),
+    p.index("memberships_user_active_idx").on(
+      table.gymId,
+      table.userId,
+      table.status,
+      table.endDate,
+    ),
   ],
 );
 
