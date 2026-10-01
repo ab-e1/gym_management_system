@@ -4,8 +4,9 @@ import * as planServices from "../services/plan.service.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export const createPlan = async (c: Context) => {
-  const body = await c.req.json();
-  const result = await planServices.createPlan(body);
+  const body = c.get("validData");
+  const gymId = c.get("gymId");
+  const result = await planServices.createPlan(gymId, body);
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }
@@ -14,10 +15,10 @@ export const createPlan = async (c: Context) => {
 };
 
 export const getAllPlans = async (c: Context) => {
-  const page = Number(c.req.query("page")) || 1;
-  const limit = Number(c.req.query("limit")) || 10;
+  const { page, limit } = c.get("validData") ?? { page: 1, limit: 10 };
+  const gymId = c.get("gymId");
 
-  const result = await planServices.getAllPlans(page, limit);
+  const result = await planServices.getAllPlans(gymId, page, limit);
 
   return success(c, result.data, result.status, {
     pagination: result.pagination,
@@ -26,6 +27,7 @@ export const getAllPlans = async (c: Context) => {
 
 export const getPlanById = async (c: Context) => {
   const id = c.req.param("id");
+  const gymId = c.get("gymId");
 
   if (!id) {
     return failure(
@@ -34,7 +36,7 @@ export const getPlanById = async (c: Context) => {
       400 as ContentfulStatusCode,
     );
   }
-  const result = await planServices.getPlanById(id);
+  const result = await planServices.getPlanById(gymId, id);
 
   if (!result.ok) {
     return failure(c, result.error, result.status);
@@ -44,8 +46,9 @@ export const getPlanById = async (c: Context) => {
 };
 
 export const updatePlan = async (c: Context) => {
-  const data = await c.req.json();
+  const data = c.get("validData");
   const id = c.req.param("id");
+  const gymId = c.get("gymId");
 
   if (!id) {
     return failure(
@@ -55,7 +58,7 @@ export const updatePlan = async (c: Context) => {
     );
   }
 
-  const result = await planServices.updatePlan(id, data);
+  const result = await planServices.updatePlan(gymId, id, data);
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }
@@ -65,6 +68,7 @@ export const updatePlan = async (c: Context) => {
 
 export const deletePlan = async (c: Context) => {
   const id = c.req.param("id");
+  const gymId = c.get("gymId");
 
   if (!id) {
     return failure(
@@ -74,7 +78,7 @@ export const deletePlan = async (c: Context) => {
     );
   }
 
-  const result = await planServices.deletePlan(id);
+  const result = await planServices.deletePlan(gymId, id);
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }

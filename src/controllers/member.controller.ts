@@ -5,7 +5,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export const createMember = async (c: Context) => {
   const body = c.get("validData");
-  const result = await memberServices.createMember(body);
+  const gymId = c.get("gymId");
+  const result = await memberServices.createMember(gymId, body);
 
   if (!result.ok) {
     return failure(c, result.error, result.status);
@@ -15,6 +16,7 @@ export const createMember = async (c: Context) => {
 
 export const getMemberById = async (c: Context) => {
   const id = c.req.param("id");
+  const gymId = c.get("gymId");
 
   if (!id) {
     return failure(
@@ -27,7 +29,7 @@ export const getMemberById = async (c: Context) => {
     );
   }
 
-  const result = await memberServices.getMemberById(id);
+  const result = await memberServices.getMemberById(gymId, id);
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }
@@ -36,8 +38,9 @@ export const getMemberById = async (c: Context) => {
 
 export const getAllMembers = async (c: Context) => {
   const { page, limit, search } = c.get("validData");
+  const gymId = c.get("gymId");
 
-  const result = await memberServices.getAllMembers(page, limit, search);
+  const result = await memberServices.getAllMembers(gymId, page, limit, search);
 
   return success(c, result.data, result.status, {
     pagination: result.pagination,
@@ -47,6 +50,7 @@ export const getAllMembers = async (c: Context) => {
 export const updateMember = async (c: Context) => {
   const id = c.req.param("id");
   const body = await c.get("validData");
+  const gymId = c.get("gymId");
 
   if (!id) {
     return failure(
@@ -59,7 +63,7 @@ export const updateMember = async (c: Context) => {
     );
   }
 
-  const result = await memberServices.updateMember(id, body);
+  const result = await memberServices.updateMember(gymId, id, body);
 
   if (!result.ok) {
     return failure(c, result.error, result.status);
@@ -69,6 +73,7 @@ export const updateMember = async (c: Context) => {
 
 export const deleteMemberToggle = async (c: Context) => {
   const id = c.req.param("id");
+  const gymId = c.get("gymId");
   if (!id) {
     return failure(
       c,
@@ -79,7 +84,7 @@ export const deleteMemberToggle = async (c: Context) => {
       400 as ContentfulStatusCode,
     );
   }
-  const result = await memberServices.deleteMemberToggle(id);
+  const result = await memberServices.deleteMemberToggle(gymId, id);
   if (!result.ok) {
     return failure(c, result.error, result.status);
   }
