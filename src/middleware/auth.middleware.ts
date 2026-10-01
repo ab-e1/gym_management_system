@@ -31,6 +31,7 @@ export const requiredAuth = createMiddleware<Env>(
 
     c.set("user", session.user);
     c.set("session", session.session);
+    c.set("gymId", session.user.gymId);
 
     await next();
   },
