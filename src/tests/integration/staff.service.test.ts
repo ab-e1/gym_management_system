@@ -1,13 +1,14 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 
 import { connection } from "../../config/connection";
-import { users, sessions, gyms } from "../../db/schema";
+import { users, sessions, gyms, memberships } from "../../db/schema";
 import * as staffService from "../../services/users/staff.service.ts";
 
 describe("integration test for the staff services", () => {
   afterAll(async () => {
-    await connection.delete(users);
+    await connection.delete(memberships);
     await connection.delete(sessions);
+    await connection.delete(users);
   });
 
   let testStaff: any;
@@ -18,8 +19,10 @@ describe("integration test for the staff services", () => {
   let testGymOne: any;
 
   beforeAll(async () => {
+    await connection.delete(memberships);
     await connection.delete(sessions);
     await connection.delete(users);
+
     [testGymOne] = await connection
       .insert(gyms)
       .values({

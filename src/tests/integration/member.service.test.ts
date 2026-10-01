@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
 import * as userService from "../../services/users/member.service.ts";
-import { gyms, users } from "../../db/schema.ts";
+import { gyms, users, memberships, membershipPlans } from "../../db/schema.ts";
 
 describe("integration test for the member sevices", () => {
   let staffId: string;
@@ -9,8 +9,12 @@ describe("integration test for the member sevices", () => {
   let gymId: string;
 
   beforeAll(async () => {
+    await connection.delete(memberships);
+    await connection.delete(membershipPlans);
     await connection.delete(users);
     await connection.delete(gyms);
+
+
 
     const [gymTest] = await connection
       .insert(gyms)
