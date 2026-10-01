@@ -2,7 +2,7 @@ import { test, describe, expect, beforeAll, afterAll } from "bun:test";
 
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
-import { sessions, users } from "../../db/schema.ts";
+import { gyms, sessions, users } from "../../db/schema.ts";
 
 describe("test for the whole end to end staff route", () => {
   let ownerToken: string;
@@ -11,15 +11,28 @@ describe("test for the whole end to end staff route", () => {
   let ownerId: string;
   let staffId: string;
   let member1Id: string;
+  let gymId: string;
 
   beforeAll(async () => {
     await connection.delete(sessions);
     await connection.delete(users);
+    await connection.delete(gyms);
+
+    const [testGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "gym staff test",
+        slug: "gym_staff_api_test",
+      })
+      .returning();
+
+    gymId = testGym.id;
 
     const [testOwner] = await connection
       .insert(users)
       .values({
         name: "api test owner",
+        gymId: `${gymId}`,
         phoneNumber: "0911991199",
         role: "owner",
       })
@@ -41,6 +54,7 @@ describe("test for the whole end to end staff route", () => {
       .insert(users)
       .values({
         name: "api test staff",
+        gymId: `${gymId}`,
         phoneNumber: "+251900990099",
         role: "staff",
       })
@@ -62,6 +76,7 @@ describe("test for the whole end to end staff route", () => {
       .insert(users)
       .values({
         name: "api test member1",
+        gymId: `${gymId}`,
         phoneNumber: "+251922002200",
         role: "member",
       })
@@ -83,6 +98,7 @@ describe("test for the whole end to end staff route", () => {
   afterAll(async () => {
     await connection.delete(sessions);
     await connection.delete(users);
+    await connection.delete(gyms);
   });
 
   test("POST /api/v1/staff should fail with 401 if unauthorized", async () => {

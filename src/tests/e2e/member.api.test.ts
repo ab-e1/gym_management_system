@@ -2,7 +2,7 @@ import { test, describe, expect, beforeAll, afterAll } from "bun:test";
 
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
-import { sessions, users } from "../../db/schema.ts";
+import { memberships, sessions, users, gyms } from "../../db/schema.ts";
 
 describe("test for the whole end to end member route", () => {
   let ownerToken: string;
@@ -11,15 +11,29 @@ describe("test for the whole end to end member route", () => {
   let ownerId: string;
   let staffId: string;
   let member1Id: string;
+  let gymId: string;
 
   beforeAll(async () => {
+    await connection.delete(memberships);
     await connection.delete(sessions);
     await connection.delete(users);
+    await connection.delete(gyms);
+
+    const [testGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "gym_member_api_test",
+        slug: "gym_member_api_slug_for_test",
+      })
+      .returning();
+
+    gymId = testGym.id;
 
     const [testOwner] = await connection
       .insert(users)
       .values({
         name: "api test owner",
+        gymId: `${gymId}`,
         phoneNumber: "0911991199",
         role: "owner",
       })
@@ -41,6 +55,7 @@ describe("test for the whole end to end member route", () => {
       .insert(users)
       .values({
         name: "api test staff",
+        gymId: `${gymId}`,
         phoneNumber: "+251900990099",
         role: "staff",
       })
@@ -62,6 +77,7 @@ describe("test for the whole end to end member route", () => {
       .insert(users)
       .values({
         name: "api test member1",
+        gymId: `${gymId}`,
         phoneNumber: "+251922002200",
         role: "member",
       })
@@ -81,8 +97,10 @@ describe("test for the whole end to end member route", () => {
   });
 
   afterAll(async () => {
+    await connection.delete(memberships);
     await connection.delete(sessions);
     await connection.delete(users);
+    await connection.delete(gyms);
   });
 
   test("POST /api/v1/members should fail with 401 if unauthorized", async () => {
@@ -255,12 +273,15 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("GET /api/v1/members/:id should fail with 404 for non-existent member ID", async () => {
-    const res = await app.request(`/api/v1/members/00000000-0000-0000-0000-000000000000`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${staffToken}`,
+    const res = await app.request(
+      `/api/v1/members/00000000-0000-0000-0000-000000000000`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${staffToken}`,
+        },
       },
-    });
+    );
     const result = (await res.json()) as any;
     expect(res.status).toBe(404);
     expect(result.ok).toBe(false);
@@ -343,16 +364,19 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("PATCH /api/v1/members/:id should fail with 404 for non-existent member ID", async () => {
-    const res = await app.request(`/api/v1/members/00000000-0000-0000-0000-000000000000`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${staffToken}`,
+    const res = await app.request(
+      `/api/v1/members/00000000-0000-0000-0000-000000000000`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          name: "ghost member",
+        }),
       },
-      body: JSON.stringify({
-        name: "ghost member",
-      }),
-    });
+    );
     expect(res.status).toBe(404);
   });
 
@@ -369,7 +393,6 @@ describe("test for the whole end to end member route", () => {
     expect(result.data.length).toBeGreaterThanOrEqual(1);
     expect(result.data[0].name).toContain("test member 2");
   });
-
 
   test("GET /api/v1/members?limit=200 should fail with 400 when limit exceeds maximum allowed", async () => {
     const res = await app.request("/api/v1/members?limit=200", {
@@ -397,16 +420,15 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("DELETE /api/v1/members/:id should fail with 404 for non-existent member ID", async () => {
-    const res = await app.request(`/api/v1/members/00000000-0000-0000-0000-000000000000`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${staffToken}`,
+    const res = await app.request(
+      `/api/v1/members/00000000-0000-0000-0000-000000000000`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${staffToken}`,
+        },
       },
-    });
+    );
     expect(res.status).toBe(404);
   });
 });
-
-
-
-

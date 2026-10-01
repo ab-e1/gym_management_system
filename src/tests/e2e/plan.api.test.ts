@@ -1,15 +1,43 @@
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
-import { membershipPlans, sessions, users } from "../../db/schema";
+import {
+  membershipPlans,
+  memberships,
+  sessions,
+  users,
+  gyms,
+} from "../../db/schema";
 
 describe("test for the whole plan route", () => {
   let createdId: string;
+  let gymId: string;
+  let testGym: any;
 
   beforeAll(async () => {
+    await connection.delete(memberships);
     await connection.delete(membershipPlans);
-    await connection.delete(users);
     await connection.delete(sessions);
+    await connection.delete(users);
+    await connection.delete(gyms);
+
+    [testGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "gym_1_test_api",
+        slug: "slug_of_gym_one_api",
+      })
+      .returning();
+
+    gymId = testGym.id;
+  });
+
+  afterAll(async () => {
+    await connection.delete(membershipPlans);
+    await connection.delete(memberships);
+    await connection.delete(sessions);
+    await connection.delete(users);
+    await connection.delete(gyms);
   });
 
   test("POST /api/v1/plans - should return the 401 if unauthenticated", async () => {
@@ -33,6 +61,7 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner test",
+        gymId: `${gymId}`,
         email: "owner email",
         phoneNumber: "0911223344",
         role: "owner",
@@ -74,6 +103,7 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff test",
+        gymId: `${gymId}`,
         email: "staff@email.com",
         phoneNumber: "0911333344",
         role: "staff",
@@ -114,6 +144,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff test",
+        gymId: `${gymId}`,
+
         email: "staff22@email.com",
         phoneNumber: "0922903344",
         role: "staff",
@@ -149,6 +181,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff3 test",
+        gymId: `${gymId}`,
+
         email: "staff11@email.com",
         phoneNumber: "0911111111",
         role: "staff",
@@ -170,6 +204,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test plan",
         price: 2000,
         duration: 30,
@@ -195,6 +231,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner2 test",
+        gymId: `${gymId}`,
+
         email: "owner2@email.com",
         phoneNumber: "0922222222",
         role: "owner",
@@ -216,6 +254,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test2 plan",
         price: 2000,
         duration: 30,
@@ -241,6 +281,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff3 test",
+        gymId: `${gymId}`,
+
         email: "staff333@email.com",
         phoneNumber: "0933333333",
         role: "staff",
@@ -262,6 +304,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test33 plan",
         price: 2000,
         duration: 30,
@@ -288,6 +332,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff4 test",
+        gymId: `${gymId}`,
+
         email: "staff44@email.com",
         phoneNumber: "0955555555",
         role: "staff",
@@ -309,6 +355,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test55 plan",
         price: 2000,
         duration: 30,
@@ -338,6 +386,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner4 test",
+        gymId: `${gymId}`,
+
         email: "owner4@email.com",
         phoneNumber: "0955554444",
         role: "owner",
@@ -359,6 +409,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test45 plan",
         price: 2000,
         duration: 30,
@@ -391,6 +443,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner123 test",
+        gymId: `${gymId}`,
+
         email: "owner123@email",
         phoneNumber: "091335344",
         role: "owner",
@@ -427,6 +481,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner6 test",
+        gymId: `${gymId}`,
+
         email: "owne64@email.com",
         phoneNumber: "09564554444",
         role: "owner",
@@ -448,6 +504,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test45 plan",
         price: 2000,
         duration: 30,
@@ -481,6 +539,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner77 test",
+        gymId: `${gymId}`,
+
         email: "owner77@email.com",
         phoneNumber: "0977777776",
         role: "owner",
@@ -502,6 +562,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test2 plan",
         price: 2000,
         duration: 30,
@@ -531,6 +593,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff993 test",
+        gymId: `${gymId}`,
+
         email: "staff993@email.com",
         phoneNumber: "099999999",
         role: "staff",
@@ -552,6 +616,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test33 plan",
         price: 2000,
         duration: 30,
@@ -581,6 +647,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner98 test",
+        gymId: `${gymId}`,
+
         email: "owne984@email.com",
         phoneNumber: "09564598444",
         role: "owner",
@@ -602,6 +670,8 @@ describe("test for the whole plan route", () => {
       .insert(membershipPlans)
       .values({
         id: crypto.randomUUID(),
+        gymId: `${gymId}`,
+
         name: "test45 plan",
         price: 2000,
         duration: 30,
@@ -628,6 +698,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "staff pagination test",
+        gymId: `${gymId}`,
+
         email: "staff_page@email.com",
         phoneNumber: "0988888888",
         role: "staff",
@@ -670,6 +742,8 @@ describe("test for the whole plan route", () => {
       .insert(users)
       .values({
         name: "owner duplicate plan test",
+        gymId: `${gymId}`,
+
         email: "owner_dup_plan@email.com",
         phoneNumber: "0999112233",
         role: "owner",
@@ -690,6 +764,8 @@ describe("test for the whole plan route", () => {
 
     await connection.insert(membershipPlans).values({
       id: crypto.randomUUID(),
+      gymId: `${gymId}`,
+
       name: "VIP Premium Plan",
       price: 10000,
       duration: 30,
@@ -714,4 +790,3 @@ describe("test for the whole plan route", () => {
     expect(body.error.code).toBe("CONFLICT");
   });
 });
-
