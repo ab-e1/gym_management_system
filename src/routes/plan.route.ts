@@ -1,5 +1,6 @@
 import { requiredAuth, requiredRole } from "../middleware/auth.middleware.ts";
 import { updatePlanSchema, planSchema } from "../schema/plan.schema.ts";
+import { paginationQuerySchema } from "../schema/common.schema.ts";
 import * as planController from "../controllers/plan.controller.ts";
 import { validate } from "../middleware/validate.middleware.ts";
 
@@ -13,6 +14,7 @@ planRoute.get(
   "/",
   requiredAuth,
   requiredRole("owner", "staff"),
+  validate(paginationQuerySchema, "query"),
   planController.getAllPlans,
 );
 planRoute.get(

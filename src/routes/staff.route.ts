@@ -6,7 +6,7 @@ import {
   createMemberSchema,
   updateMemberSchema,
 } from "../schema/user.schema.ts";
-import { paginationQuerySchema } from "../schema/plan.schema.ts";
+import { paginationQuerySchema } from "../schema/common.schema.ts";
 
 const staffRoute = new Hono();
 
