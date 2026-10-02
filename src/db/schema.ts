@@ -35,7 +35,7 @@ export const users = p.pgTable(
       .notNull(),
     name: p.text("name").notNull(),
     phoneNumber: p.text("phone").notNull(),
-    email: p.text("email").unique(),
+    email: p.text("email"),
     photoUrl: p.text("photo_url"),
     role: roleEnum("role").default("member").notNull(),
     phoneNumberVerified: p.boolean("phone_verified").default(false).notNull(),
@@ -53,6 +53,13 @@ export const users = p.pgTable(
     p.index("user_name_idx").on(table.name),
     p.index("user_gym_id_idx").on(table.gymId),
     p.unique("user_phone_unique_per_gym").on(table.gymId, table.phoneNumber),
+    p.unique("user_email_unique_per_gym").on(table.gymId, table.email),
+    p
+      .index("user_all_members_idx")
+      .on(table.gymId, table.role, table.isDeleted),
+    p
+      .index("user_all_active_members")
+      .on(table.gymId, table.role, table.isDeleted, table.status),
   ],
 );
 
@@ -113,17 +120,15 @@ export const memberships = p.pgTable(
   (table) => [
     p.index("memberships_gym_id_idx").on(table.gymId),
     p.index("memberships_user_id_idx").on(table.userId),
-    p.index("memberships_auto_expire_idx").on(
-      table.gymId,
-      table.status,
-      table.endDate,
-    ),
-    p.index("memberships_user_active_idx").on(
-      table.gymId,
-      table.userId,
-      table.status,
-      table.endDate,
-    ),
+    p
+      .index("memberships_auto_expire_idx")
+      .on(table.gymId, table.status, table.endDate),
+    p
+      .index("memberships_user_active_idx")
+      .on(table.gymId, table.userId, table.status, table.endDate),
+    p
+      .index("memberships_gym_user_deleted_idx")
+      .on(table.gymId, table.userId, table.isDeleted),
   ],
 );
 
@@ -147,6 +152,7 @@ export const payments = p.pgTable(
       .references(() => users.id)
       .notNull(),
     paidAt: p.timestamp("paid_at").defaultNow().notNull(),
+    referenceCode: p.text("reference_code"),
   },
   (table) => [
     p.index("payments_memberships_id_idx").on(table.membershipId),
