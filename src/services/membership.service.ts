@@ -11,101 +11,110 @@ export const createMembership = async (
     startDate?: Date;
   },
 ) => {
-  // 1. Validate target member exists in this gym
-  const [targetUser] = await connection
-    .select()
-    .from(users)
-    .where(
-      and(
-        eq(users.id, data.userId),
-        eq(users.gymId, gymId),
-        eq(users.role, "member"),
-        eq(users.isDeleted, false),
-      ),
+  return await connection.transaction(async (tx) => {
+    // 1. Validate target member exists in this gym
+    const [targetUser] = await tx
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.id, data.userId),
+          eq(users.gymId, gymId),
+          eq(users.role, "member"),
+          eq(users.isDeleted, false),
+        ),
+      )
+      .for("update");
+
+    if (!targetUser) {
+      return {
+        ok: false as const,
+        error: {
+          code: "NOT_FOUND",
+          message: "Active member not found with the provided userId",
+        },
+        status: 404 as ContentfulStatusCode,
+      };
+    }
+
+    // 2. Validate target plan exists in this gym
+    const [targetPlan] = await tx
+      .select()
+      .from(membershipPlans)
+      .where(
+        and(
+          eq(membershipPlans.id, data.planId),
+          eq(membershipPlans.gymId, gymId),
+          eq(membershipPlans.isDeleted, false),
+        ),
+      );
+
+    if (!targetPlan) {
+      return {
+        ok: false as const,
+        error: {
+          code: "NOT_FOUND",
+          message: "Active membership plan not found with the provided planId",
+        },
+        status: 404 as ContentfulStatusCode,
+      };
+    }
+
+    const now = new Date();
+
+    // 3. Check for existing active membership for smart renewal stacking
+    const [activeMembership] = await tx
+      .select()
+      .from(memberships)
+      .where(
+        and(
+          eq(memberships.userId, data.userId),
+          eq(memberships.gymId, gymId),
+          eq(memberships.status, "active"),
+          gte(memberships.endDate, now),
+          eq(memberships.isDeleted, false),
+        ),
+      )
+      .orderBy(desc(memberships.endDate))
+      .for("update");
+
+    let startDate: Date;
+    if (activeMembership) {
+      // Stack renewal onto existing active plan's end date
+      startDate = new Date(activeMembership.endDate);
+    } else {
+      startDate = data.startDate ?? now;
+    }
+
+    // Calculate endDate based on plan duration in days
+    const endDate = new Date(
+      startDate.getTime() + targetPlan.duration * 24 * 60 * 60 * 1000,
     );
+    if (targetUser.status === "inactive") {
+      await tx
+        .update(users)
+        .set({ status: "active" })
+        .where(and(eq(users.id, data.userId), eq(users.gymId, gymId)));
+    }
 
-  if (!targetUser) {
+    const [newMembership] = await tx
+      .insert(memberships)
+      .values({
+        gymId,
+        userId: data.userId,
+        planId: data.planId,
+        startDate,
+        endDate,
+        status: "active",
+      })
+      .returning();
+
     return {
-      ok: false as const,
-      error: {
-        code: "NOT_FOUND",
-        message: "Active member not found with the provided userId",
-      },
-      status: 404 as ContentfulStatusCode,
+      ok: true as const,
+      data: newMembership,
+      status: 201 as ContentfulStatusCode,
     };
-  }
-
-  // 2. Validate target plan exists in this gym
-  const [targetPlan] = await connection
-    .select()
-    .from(membershipPlans)
-    .where(
-      and(
-        eq(membershipPlans.id, data.planId),
-        eq(membershipPlans.gymId, gymId),
-        eq(membershipPlans.isDeleted, false),
-      ),
-    );
-
-  if (!targetPlan) {
-    return {
-      ok: false as const,
-      error: {
-        code: "NOT_FOUND",
-        message: "Active membership plan not found with the provided planId",
-      },
-      status: 404 as ContentfulStatusCode,
-    };
-  }
-
-  const now = new Date();
-
-  // 3. Check for existing active membership for smart renewal stacking
-  const [activeMembership] = await connection
-    .select()
-    .from(memberships)
-    .where(
-      and(
-        eq(memberships.userId, data.userId),
-        eq(memberships.gymId, gymId),
-        eq(memberships.status, "active"),
-        gte(memberships.endDate, now),
-        eq(memberships.isDeleted, false),
-      ),
-    )
-    .orderBy(desc(memberships.endDate));
-
-
-  let startDate: Date;
-  if (activeMembership) {
-    // Stack renewal onto existing active plan's end date
-    startDate = new Date(activeMembership.endDate);
-  } else {
-    startDate = data.startDate ?? now;
-  }
-
-  // Calculate endDate based on plan duration in days
-  const endDate = new Date(
-    startDate.getTime() + targetPlan.duration * 24 * 60 * 60 * 1000,
-  );
-
-  const [newMembership] = await connection
-    .insert(memberships)
-    .values({
-      gymId,
-      userId: data.userId,
-      planId: data.planId,
-      startDate,
-      endDate,
-      status: "active",
-    })
-    .returning();
-
-  return {
-    ok: true as const,
-    data: newMembership,
-    status: 201 as ContentfulStatusCode,
-  };
+  });
 };
 
 export const getAllMemberships = async (
@@ -132,10 +141,7 @@ export const getAllMemberships = async (
     } else if (statusFilter === "expired") {
       const expiredCondition = or(
         eq(memberships.status, "expired"),
-        and(
-          eq(memberships.status, "active"),
-          lt(memberships.endDate, now),
-        ),
+        and(eq(memberships.status, "active"), lt(memberships.endDate, now)),
       );
       if (expiredCondition) {
         conditions.push(expiredCondition);
@@ -173,15 +179,32 @@ export const getAllMemberships = async (
       createdAt: memberships.createdAt,
     })
     .from(memberships)
-    .innerJoin(users, eq(memberships.userId, users.id))
-    .innerJoin(membershipPlans, eq(memberships.planId, membershipPlans.id))
+    .innerJoin(
+      users,
+      and(
+        eq(memberships.userId, users.id),
+        eq(users.gymId, gymId),
+        eq(users.isDeleted, false),
+      ),
+    )
+    .innerJoin(
+      membershipPlans,
+      and(
+        eq(memberships.planId, membershipPlans.id),
+        eq(membershipPlans.gymId, gymId),
+        eq(membershipPlans.isDeleted, false),
+      ),
+    )
     .where(filterCondition)
     .limit(limit)
     .offset(offset);
 
   const records = rawRecords.map((membershipRecord) => {
     let computedStatus = membershipRecord.status;
-    if (membershipRecord.status === "active" && membershipRecord.endDate < now) {
+    if (
+      membershipRecord.status === "active" &&
+      membershipRecord.endDate < now
+    ) {
       computedStatus = "expired";
     }
 
@@ -226,8 +249,22 @@ export const getMembershipById = async (gymId: string, id: string) => {
       createdAt: memberships.createdAt,
     })
     .from(memberships)
-    .innerJoin(users, eq(memberships.userId, users.id))
-    .innerJoin(membershipPlans, eq(memberships.planId, membershipPlans.id))
+    .innerJoin(
+      users,
+      and(
+        eq(memberships.userId, users.id),
+        eq(users.gymId, gymId),
+        eq(users.isDeleted, false),
+      ),
+    )
+    .innerJoin(
+      membershipPlans,
+      and(
+        eq(memberships.planId, membershipPlans.id),
+        eq(membershipPlans.gymId, gymId),
+        eq(membershipPlans.isDeleted, false),
+      ),
+    )
     .where(
       and(
         eq(memberships.id, id),
