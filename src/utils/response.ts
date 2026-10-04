@@ -27,6 +27,7 @@ export const failure = (
     code: string;
     message: string;
     description?: string;
+    details?: Record<string, any>;
   },
   statusCode: ContentfulStatusCode = 400,
 ) => {
