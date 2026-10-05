@@ -54,3 +54,25 @@ export const deleteStaffToggle = async (c: Context) => {
   }
   return success(c, { message: result.data.message }, result.status);
 };
+
+export const promoteMemberToStaff = async (c: Context) => {
+  const id = String(c.req.param("id"));
+  const gymId = c.get("gymId");
+
+  const result = await staffServices.promoteMemberToStaff(gymId, id);
+  if (!result.ok) {
+    return failure(c, result.error, result.status);
+  }
+  return success(c, result.data, result.status);
+};
+
+export const rehireStaff = async (c: Context) => {
+  const id = String(c.req.param("id"));
+  const gymId = c.get("gymId");
+
+  const result = await staffServices.rehireStaff(gymId, id);
+  if (!result.ok) {
+    return failure(c, result.error, result.status);
+  }
+  return success(c, result.data, result.status);
+};

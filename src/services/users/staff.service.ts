@@ -1,5 +1,5 @@
 import { connection } from "../../config/connection.ts";
-import { users } from "../../db/schema.ts";
+import { sessions, users } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq, and, count, or, ilike } from "drizzle-orm";
 import { normalizePhoneNumber } from "../../utils/helpers.ts";
@@ -19,30 +19,54 @@ export const createStaff = async (
       and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
     );
 
-  if (duplicate && duplicate.isDeleted) {
-    const [changedStaff] = await connection
-      .update(users)
-      .set({
-        name: data.name,
-        email: data.email ?? duplicate.email,
-        isDeleted: false,
-        role: "staff",
-      })
-      .where(and(eq(users.id, duplicate.id), eq(users.gymId, gymId)))
-      .returning();
+  if (duplicate && duplicate.role === "member") {
     return {
-      ok: true as const,
-      data: changedStaff,
-      status: 201 as ContentfulStatusCode,
+      ok: false as const,
+      error: {
+        code: "CONFLICT",
+        message: "member already exists with the provided phoneNumber",
+        details: {
+          memberId: duplicate.id,
+          memberName: duplicate.name,
+          phoneNumber: duplicate.phoneNumber,
+        },
+      },
+      status: 409 as ContentfulStatusCode,
     };
   }
 
+  if (duplicate && duplicate.role === "staff" && duplicate.isDeleted) {
+    return {
+      ok: false as const,
+      error: {
+        code: "CONFLICT",
+        message: "Archived Staff already exists with the provided phone number",
+        details: {
+          staffId: duplicate.id,
+          staffName: duplicate.name,
+          phoneNumber: duplicate.phoneNumber,
+        },
+      },
+      status: 409 as ContentfulStatusCode,
+    };
+  }
+
+  if (duplicate && duplicate.role === "staff") {
+    return {
+      ok: false as const,
+      error: {
+        code: "CONFLICT",
+        message: "Staff already exist with the given phoneNumber",
+      },
+      status: 409 as ContentfulStatusCode,
+    };
+  }
   if (duplicate) {
     return {
       ok: false as const,
       error: {
         code: "CONFLICT",
-        message: "Staff already exists with the provided phone number",
+        message: "user already exisitwith this phone number",
       },
       status: 409 as ContentfulStatusCode,
     };
@@ -255,6 +279,8 @@ export const deleteStaffToggle = async (gymId: string, id: string) => {
     .set({ isDeleted: newDeleteState })
     .where(and(eq(users.id, id), eq(users.gymId, gymId)));
 
+  await connection.delete(sessions).where(and(eq(sessions.userId, id)));
+
   return {
     ok: true as const,
     data: {
@@ -262,6 +288,85 @@ export const deleteStaffToggle = async (gymId: string, id: string) => {
         ? "Staff member soft-deleted successfully"
         : "Staff member recovered successfully",
     },
+    status: 200 as ContentfulStatusCode,
+  };
+};
+
+export const promoteMemberToStaff = async (gymId: string, memberId: string) => {
+  const [member] = await connection
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.id, memberId),
+        eq(users.gymId, gymId),
+        eq(users.role, "member"),
+      ),
+    );
+  if (!member) {
+    return {
+      ok: false as const,
+      error: {
+        code: "NOT_FOUND",
+        message: "no member found with the provided id",
+      },
+      status: 404 as ContentfulStatusCode,
+    };
+  }
+  const [promotedMember] = await connection
+    .update(users)
+    .set({ role: "staff", status: "active", isDeleted: false })
+    .where(and(eq(users.gymId, gymId), eq(users.id, memberId)))
+    .returning();
+  return {
+    ok: true as const,
+    data: promotedMember,
+    message: "successfully promoted member to a staff",
+    status: 200 as ContentfulStatusCode,
+  };
+};
+
+export const rehireStaff = async (gymId: string, staffId: string) => {
+  const [staff] = await connection
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.gymId, gymId),
+        eq(users.id, staffId),
+        eq(users.role, "staff"),
+        eq(users.isDeleted, true),
+      ),
+    );
+
+  if (!staff) {
+    return {
+      ok: false as const,
+      error: {
+        code: "NOT_FOUND",
+        message: "staff not found with the provided id",
+      },
+      status: 404 as ContentfulStatusCode,
+    };
+  }
+
+  const [rehiredStaff] = await connection
+    .update(users)
+    .set({ status: "active", isDeleted: false })
+    .where(
+      and(
+        eq(users.gymId, gymId),
+        eq(users.id, staffId),
+        eq(users.role, "staff"),
+        eq(users.isDeleted, true),
+      ),
+    )
+    .returning();
+
+  return {
+    ok: true as const,
+    data: rehiredStaff,
+    message: "successfully rehired a staff",
     status: 200 as ContentfulStatusCode,
   };
 };

@@ -22,6 +22,10 @@ staffRoute.get("/:id", staffController.getStaffById);
 
 staffRoute.post("/", validate(createMemberSchema), staffController.createStaff);
 
+staffRoute.post("/:id/promote", staffController.promoteMemberToStaff);
+
+staffRoute.post("/:id/rehire", staffController.rehireStaff);
+
 staffRoute.patch(
   "/:id",
   validate(updateMemberSchema),

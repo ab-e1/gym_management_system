@@ -1,6 +1,6 @@
 import { and, count, eq, ilike, or } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
-import { users } from "../../db/schema.ts";
+import { sessions, users } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { normalizePhoneNumber } from "../../utils/helpers.ts";
 
@@ -18,6 +18,31 @@ export const createMember = async (
     .where(
       and(eq(users.phoneNumber, data.phoneNumber), eq(users.gymId, gymId)),
     );
+  if (duplicate && duplicate.isDeleted) {
+    if (duplicate.role === "staff") {
+      await connection
+        .delete(sessions)
+        .where(eq(sessions.userId, duplicate.id));
+    }
+
+    const [resurectedUser] = await connection
+      .update(users)
+      .set({
+        name: data.name,
+        email: data.email,
+        isDeleted: false,
+        role: "member",
+        status: "active",
+      })
+      .where(and(eq(users.gymId, gymId), eq(users.id, duplicate.id)))
+      .returning();
+    return {
+      ok: true as const,
+      data: resurectedUser,
+      message: "successfully resurected a deleted user",
+      status: 200 as ContentfulStatusCode,
+    };
+  }
   if (duplicate) {
     return {
       ok: false as const,
