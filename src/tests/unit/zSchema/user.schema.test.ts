@@ -1,4 +1,4 @@
-import { createMemberSchema } from "../../../schema/user.schema.ts";
+import { createMemberSchema, updateMemberSchema } from "../../../schema/user.schema.ts";
 import { describe, test, expect } from "bun:test";
 
 describe("user schema unit test", () => {
@@ -61,4 +61,20 @@ describe("user schema unit test", () => {
       expect(result.data.phoneNumber).toBe("+251911223344");
     }
   });
+
+  test("updateMemberSchema should pass for valid status: active", () => {
+    const result = updateMemberSchema.safeParse({ status: "active" });
+    expect(result.success).toBe(true);
+  });
+
+  test("updateMemberSchema should pass for valid status: inactive", () => {
+    const result = updateMemberSchema.safeParse({ status: "inactive" });
+    expect(result.success).toBe(true);
+  });
+
+  test("updateMemberSchema should fail for invalid status string", () => {
+    const result = updateMemberSchema.safeParse({ status: "actuve" });
+    expect(result.success).toBe(false);
+  });
 });
+

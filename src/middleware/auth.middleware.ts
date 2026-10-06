@@ -28,7 +28,13 @@ export const requiredAuth = createMiddleware<Env>(
         401 as ContentfulStatusCode,
       );
     }
-
+    if (session.user.status !== "active" || session.user.isDeleted) {
+      return failure(
+        c,
+        { code: "UN_AUTHORIZED", message: "user is not a valid staff member" },
+        403 as ContentfulStatusCode,
+      );
+    }
     c.set("user", session.user);
     c.set("session", session.session);
     c.set("gymId", session.user.gymId);

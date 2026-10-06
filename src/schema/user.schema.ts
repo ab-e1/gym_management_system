@@ -20,7 +20,7 @@ export const updateMemberSchema = z.object({
     .transform(normalizePhoneNumber)
     .optional(),
   email: z.string().email({ message: "invalid email address" }).optional(),
-  status: z.string().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
 });
 
 export { paginationQuerySchema } from "./common.schema.ts";

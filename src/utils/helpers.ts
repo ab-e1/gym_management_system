@@ -9,6 +9,9 @@ export const normalizePhoneNumber = (phoneNumber?: string) => {
   if (cleaned.startsWith("251")) {
     return "+" + cleaned;
   }
+  if (cleaned.startsWith("+")) {
+    return cleaned;
+  }
   if (!cleaned.startsWith("+")) {
     return "+251" + cleaned;
   }
