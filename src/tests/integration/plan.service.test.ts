@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import * as planSevices from "../../services/plan.service.ts";
 import { connection } from "../../config/connection.ts";
-import { gyms, membershipPlans, memberships, users } from "../../db/schema.ts";
+import { gyms, membershipPlans, memberships, payments, users } from "../../db/schema.ts";
 import { eq, and } from "drizzle-orm";
 
 describe("plan service integration tests", () => {
@@ -10,6 +10,7 @@ describe("plan service integration tests", () => {
   let gymId: string;
 
   beforeAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
     await connection.delete(users);
@@ -240,6 +241,7 @@ describe("plan service integration tests", () => {
   });
 
   afterAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
     await connection.delete(users);

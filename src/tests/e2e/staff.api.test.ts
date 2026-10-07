@@ -346,4 +346,128 @@ describe("test for the whole end to end staff route", () => {
     );
     expect(res.status).toBe(404);
   });
+
+  describe("POST /api/v1/staff/:id/promote & rehire (E2E)", () => {
+    let activeStaffToken: string;
+
+    beforeAll(async () => {
+      const [anotherStaff] = await connection
+        .insert(users)
+        .values({
+          name: "Active Staff For RBAC",
+          gymId,
+          phoneNumber: "+251911882233",
+          role: "staff",
+          status: "active",
+        })
+        .returning();
+
+      const [anotherStaffSession] = await connection
+        .insert(sessions)
+        .values({
+          id: crypto.randomUUID(),
+          userId: anotherStaff.id,
+          token: "active-staff-token-rbac-test",
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        })
+        .returning();
+
+      activeStaffToken = anotherStaffSession.token;
+    });
+
+    test("POST /api/v1/staff/:id/promote should fail with 403 when called by staff role", async () => {
+      const res = await app.request(`/api/v1/staff/${member1Id}/promote`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${activeStaffToken}`,
+        },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    test("POST /api/v1/staff/:id/promote should succeed with 200 when called by owner", async () => {
+      const res = await app.request(`/api/v1/staff/${member1Id}/promote`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+        },
+      });
+      const result = (await res.json()) as any;
+      expect(res.status).toBe(200);
+      expect(result.ok).toBe(true);
+      expect(result.data.role).toBe("staff");
+      expect(result.data.status).toBe("active");
+    });
+
+    test("POST /api/v1/staff/:id/promote should fail with 404 for non-existent member ID", async () => {
+      const res = await app.request(
+        `/api/v1/staff/00000000-0000-0000-0000-000000000000/promote`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ownerToken}`,
+          },
+        },
+      );
+      expect(res.status).toBe(404);
+    });
+
+    test("POST /api/v1/staff/:id/rehire should fail with 403 when called by staff role", async () => {
+      const res = await app.request(`/api/v1/staff/${staffId}/rehire`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${activeStaffToken}`,
+        },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    test("POST /api/v1/staff/:id/rehire should succeed with 200 when called by owner for archived staff", async () => {
+      // staffId was soft deleted in the previous DELETE test
+      const res = await app.request(`/api/v1/staff/${staffId}/rehire`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+        },
+      });
+      const result = (await res.json()) as any;
+      expect(res.status).toBe(200);
+      expect(result.ok).toBe(true);
+      expect(result.data.isDeleted).toBe(false);
+      expect(result.data.status).toBe("active");
+    });
+
+    test("POST /api/v1/staff should return 409 with details when phone belongs to an existing member", async () => {
+      // Seed a fresh member
+      const [freshMember] = await connection
+        .insert(users)
+        .values({
+          name: "Collision Test Member",
+          gymId,
+          phoneNumber: "+251955001122",
+          role: "member",
+        })
+        .returning();
+
+      const res = await app.request("/api/v1/staff", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ownerToken}`,
+        },
+        body: JSON.stringify({
+          name: "Collision Trying Staff",
+          phoneNumber: "+251955001122",
+        }),
+      });
+
+      const result = (await res.json()) as any;
+      expect(res.status).toBe(409);
+      expect(result.ok).toBe(false);
+      expect(result.error.code).toBe("CONFLICT");
+      expect(result.error.details).toBeDefined();
+      expect(result.error.details.memberId).toBe(freshMember.id);
+    });
+  });
 });
+

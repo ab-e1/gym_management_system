@@ -2,18 +2,19 @@ import { test, describe, expect, beforeAll, afterAll } from "bun:test";
 
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
-import { memberships, sessions, users, gyms } from "../../db/schema.ts";
+import { memberships, payments, sessions, users, gyms } from "../../db/schema.ts";
 
 describe("test for the whole end to end member route", () => {
   let ownerToken: string;
   let staffToken: string;
-  let member1Token: string;
+  let activeMemberToken: string;
   let ownerId: string;
   let staffId: string;
-  let member1Id: string;
+  let activeMemberId: string;
   let gymId: string;
 
   beforeAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(sessions);
     await connection.delete(users);
@@ -22,81 +23,82 @@ describe("test for the whole end to end member route", () => {
     const [testGym] = await connection
       .insert(gyms)
       .values({
-        name: "gym_member_api_test",
-        slug: "gym_member_api_slug_for_test",
+        name: "Gym Member E2E Test Center",
+        slug: "gym_member_e2e_test_center",
       })
       .returning();
 
     gymId = testGym.id;
 
-    const [testOwner] = await connection
+    const [gymOwner] = await connection
       .insert(users)
       .values({
-        name: "api test owner",
+        name: "Owner Fitsum",
         gymId: `${gymId}`,
         phoneNumber: "0911991199",
         role: "owner",
       })
       .returning();
-    ownerId = testOwner.id;
+    ownerId = gymOwner.id;
 
-    const [testOwnerSession] = await connection
+    const [ownerSessionRecord] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
         userId: ownerId,
-        token: "test-owner-session-key",
+        token: "e2e-owner-session-token",
         expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
       })
       .returning();
-    ownerToken = testOwnerSession.token;
+    ownerToken = ownerSessionRecord.token;
 
-    const [testStaff] = await connection
+    const [gymStaff] = await connection
       .insert(users)
       .values({
-        name: "api test staff",
+        name: "Staff Aster",
         gymId: `${gymId}`,
         phoneNumber: "+251900990099",
         role: "staff",
       })
       .returning();
-    staffId = testStaff.id;
+    staffId = gymStaff.id;
 
-    const [testStaffSession] = await connection
+    const [staffSessionRecord] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
         userId: staffId,
-        token: "test-staff-session-key",
+        token: "e2e-staff-session-token",
         expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
       })
       .returning();
-    staffToken = testStaffSession.token;
+    staffToken = staffSessionRecord.token;
 
-    const [testMember1] = await connection
+    const [existingMember] = await connection
       .insert(users)
       .values({
-        name: "api test member1",
+        name: "Member Almaz",
         gymId: `${gymId}`,
         phoneNumber: "+251922002200",
         role: "member",
       })
       .returning();
-    member1Id = testMember1.id;
+    activeMemberId = existingMember.id;
 
-    const [testMemberSession] = await connection
+    const [memberSessionRecord] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
-        userId: member1Id,
-        token: "test-member1-session-key",
+        userId: activeMemberId,
+        token: "e2e-member-session-token",
         expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
       })
       .returning();
-    member1Token = testMemberSession.token;
+    activeMemberToken = memberSessionRecord.token;
   });
 
   afterAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(sessions);
     await connection.delete(users);
@@ -124,7 +126,7 @@ describe("test for the whole end to end member route", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${member1Token}`,
+        Authorization: `Bearer ${activeMemberToken}`,
       },
       body: JSON.stringify({
         name: "test member 1",
@@ -239,7 +241,7 @@ describe("test for the whole end to end member route", () => {
     const res = await app.request("/api/v1/members", {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${member1Token}`,
+        Authorization: `Bearer ${activeMemberToken}`,
       },
     });
     const result = (await res.json()) as any;
@@ -248,10 +250,10 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("GET /api/v1/members/:id should fail with 403 when accessed by member role", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${member1Token}`,
+        Authorization: `Bearer ${activeMemberToken}`,
       },
     });
     const result = (await res.json()) as any;
@@ -288,7 +290,7 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("GET /api/v1/members/:id should pass with 200 when accessed by staff", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${staffToken}`,
@@ -301,7 +303,7 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("GET /api/v1/members/:id should pass with 200 when accessed by owner", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${ownerToken}`,
@@ -314,7 +316,7 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("PATCH /api/v1/members/:id should pass with 200 when patched by staff", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -331,7 +333,7 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("PATCH /api/v1/members/:id should pass with 200 when patched by owner", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -348,11 +350,11 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("PATCH /api/v1/members/:id should fail with 403 when patching with unauthorized person", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${member1Token}`,
+        Authorization: `Bearer ${activeMemberToken}`,
       },
       body: JSON.stringify({
         name: "member1 updated",
@@ -408,7 +410,7 @@ describe("test for the whole end to end member route", () => {
   });
 
   test("DELETE /api/v1/members/:id should pass with 200 when toggled by staff", async () => {
-    const res = await app.request(`/api/v1/members/${member1Id}`, {
+    const res = await app.request(`/api/v1/members/${activeMemberId}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${staffToken}`,

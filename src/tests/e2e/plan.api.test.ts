@@ -4,6 +4,7 @@ import { connection } from "../../config/connection.ts";
 import {
   membershipPlans,
   memberships,
+  payments,
   sessions,
   users,
   gyms,
@@ -15,6 +16,7 @@ describe("test for the whole plan route", () => {
   let testGym: any;
 
   beforeAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
     await connection.delete(sessions);
@@ -33,8 +35,9 @@ describe("test for the whole plan route", () => {
   });
 
   afterAll(async () => {
-    await connection.delete(membershipPlans);
+    await connection.delete(payments);
     await connection.delete(memberships);
+    await connection.delete(membershipPlans);
     await connection.delete(sessions);
     await connection.delete(users);
     await connection.delete(gyms);

@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
 import * as membershipService from "../../services/membership.service.ts";
-import { gyms, membershipPlans, memberships, sessions, users } from "../../db/schema.ts";
+import { gyms, membershipPlans, memberships, payments, sessions, users } from "../../db/schema.ts";
 
 describe("membership service integration tests (TDD)", () => {
   let gymId: string;
@@ -11,6 +11,7 @@ describe("membership service integration tests (TDD)", () => {
 
   beforeAll(async () => {
     // 1. Wipe tables in reverse dependency order
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
     await connection.delete(sessions);
@@ -151,6 +152,44 @@ describe("membership service integration tests (TDD)", () => {
         }
       }
     });
+
+    test("should handle concurrent membership creation requests without race conditions", async () => {
+      // 1. Seed fresh member
+      const [concurrentMember] = await connection
+        .insert(users)
+        .values({
+          gymId,
+          name: "Concurrent Member",
+          phoneNumber: "+251911777777",
+          role: "member",
+        })
+        .returning();
+
+      // 2. Fire 2 parallel createMembership requests simultaneously
+      const [result1, result2] = await Promise.all([
+        membershipService.createMembership(gymId, {
+          userId: concurrentMember.id,
+          planId: planId,
+        }),
+        membershipService.createMembership(gymId, {
+          userId: concurrentMember.id,
+          planId: planId,
+        }),
+      ]);
+
+      expect(result1.ok).toBe(true);
+      expect(result2.ok).toBe(true);
+
+      if (result1.ok && result2.ok) {
+        const end1 = new Date(result1.data.endDate).getTime();
+        const start2 = new Date(result2.data.startDate).getTime();
+        const end2 = new Date(result2.data.endDate).getTime();
+        const start1 = new Date(result1.data.startDate).getTime();
+
+        const datesStackedCorrectly = start2 >= end1 || start1 >= end2;
+        expect(datesStackedCorrectly).toBe(true);
+      }
+    });
   });
 
   describe("getAllMemberships", () => {
@@ -217,6 +256,48 @@ describe("membership service integration tests (TDD)", () => {
       if (activeMembershipsResult.ok) {
         const foundActiveMembership = activeMembershipsResult.data.find((membership) => membership.id === pastMembership.id);
         expect(foundActiveMembership).toBeUndefined(); // Must be excluded from active filter!
+      }
+    });
+
+    test("should exclude memberships of soft-deleted users (inner join gate)", async () => {
+      // 1. Seed soft-deleted member user
+      const [deletedMember] = await connection
+        .insert(users)
+        .values({
+          gymId,
+          name: "Deleted Member",
+          phoneNumber: "+251911999999",
+          role: "member",
+          isDeleted: true,
+        })
+        .returning();
+
+      // 2. Create membership for deleted member
+      const [membershipForDeleted] = await connection
+        .insert(memberships)
+        .values({
+          gymId,
+          userId: deletedMember.id,
+          planId: planId,
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: "active",
+        })
+        .returning();
+
+      // 3. getMembershipById should return 404 because user is soft-deleted!
+      const singleResult = await membershipService.getMembershipById(gymId, membershipForDeleted.id);
+      expect(singleResult.ok).toBe(false);
+      if (!singleResult.ok) {
+        expect(singleResult.status).toBe(404);
+      }
+
+      // 4. getAllMemberships should exclude membership of soft-deleted user!
+      const listResult = await membershipService.getAllMemberships(gymId, 1, 50);
+      expect(listResult.ok).toBe(true);
+      if (listResult.ok) {
+        const found = listResult.data.find((m) => m.id === membershipForDeleted.id);
+        expect(found).toBeUndefined();
       }
     });
   });
