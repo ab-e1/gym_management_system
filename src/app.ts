@@ -4,6 +4,8 @@ import { auth } from "./config/auth.ts";
 import planRoute from "./routes/plan.route.ts";
 import memberRoute from "./routes/member.route.ts";
 import staffRoute from "./routes/staff.route.ts";
+import membershipRoute from "./routes/membership.route.ts";
+import enrollmentRoute from "./routes/enrollment.route.ts";
 import { failure } from "./utils/response.ts";
 
 const app = new Hono();
@@ -23,6 +25,10 @@ app.route("/api/v1/plans", planRoute);
 app.route("/api/v1/members", memberRoute);
 
 app.route("/api/v1/staff", staffRoute);
+
+app.route("/api/v1/membership", membershipRoute);
+
+app.route("/api/v1/enrollment", enrollmentRoute);
 
 // error handling
 app.onError((err, c) => {
