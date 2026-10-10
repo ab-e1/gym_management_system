@@ -1,228 +1,404 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
+import { eq } from "drizzle-orm";
 import * as userService from "../../services/users/member.service.ts";
-import { gyms, users, memberships, membershipPlans } from "../../db/schema.ts";
+import {
+  gyms,
+  users,
+  memberships,
+  payments,
+  membershipPlans,
+  sessions,
+} from "../../db/schema.ts";
 
-describe("integration test for the member sevices", () => {
-  let staffId: string;
-  let memberId: string;
-  let gymId: string;
+describe("integration test for member services", () => {
+  let primaryGymId: string;
 
   beforeAll(async () => {
+    await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
     await connection.delete(users);
     await connection.delete(gyms);
 
-
-
-    const [gymTest] = await connection
+    const [primaryGym] = await connection
       .insert(gyms)
       .values({
-        name: "gym one test",
-        slug: "gym_one_test",
+        name: "Bole Branch Gym",
+        slug: "bole_branch_gym",
       })
       .returning();
 
-    gymId = gymTest.id;
+    primaryGymId = primaryGym.id;
   });
 
-  test("creating member should pass when provided with a valid data", async () => {
-    const result = await userService.createMember(`${gymId}`, {
-      name: "test user",
+  test("creating member should pass when provided with valid data", async () => {
+    const createResult = await userService.createMember(primaryGymId, {
+      name: "Abebe Bikila",
       phoneNumber: "+251911223344",
-      email: "user@email.com",
+      email: "abebe@gym.et",
     });
-    expect(result.ok).toBe(true);
-    expect(result.status).toBe(201);
-    expect(result.data!.name).toBe("test user");
+
+    expect(createResult.ok).toBe(true);
+    expect(createResult.status).toBe(201);
+    expect(createResult.data!.name).toBe("Abebe Bikila");
   });
 
-  test("creating member should fail when given a duplicate data", async () => {
-    const result = await userService.createMember(`${gymId}`, {
-      name: "test user",
+  test("creating member should fail when given duplicate phone number in same gym", async () => {
+    const duplicatePhoneResult = await userService.createMember(primaryGymId, {
+      name: "Duplicate Phone Member",
       phoneNumber: "+251911223344",
-      email: "user@email.com",
+      email: "different.email@gym.et",
     });
-    expect(result.ok).toBe(false);
-    expect(result.status).toBe(409);
-    expect(result.error!.code).toBe("CONFLICT");
+
+    expect(duplicatePhoneResult.ok).toBe(false);
+    expect(duplicatePhoneResult.status).toBe(409);
+    expect(duplicatePhoneResult.error!.code).toBe("CONFLICT");
   });
 
-  test("getting all member should pass with 200, with pagination", async () => {
-    const result = await userService.getAllMembers(`${gymId}`, 1, 20);
-    expect(result.ok).toBe(true);
-    expect(result.status).toBe(200);
-    expect(result.pagination).toBeDefined();
-    expect(result.pagination.totalMembers).toBeGreaterThanOrEqual(1);
-    expect(result.pagination.limit).toBe(20);
+  test("creating member with same email in a DIFFERENT gym should pass (multi-tenant email isolation)", async () => {
+    const [secondTenantGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "Kazanchis Branch Gym",
+        slug: "kazanchis_branch_gym_email",
+      })
+      .returning();
+
+    const crossGymMemberResult = await userService.createMember(secondTenantGym.id, {
+      name: "Tenant Two Member",
+      phoneNumber: "+251999887766",
+      email: "abebe@gym.et",
+    });
+
+    expect(crossGymMemberResult.ok).toBe(true);
+    expect(crossGymMemberResult.status).toBe(201);
+    expect(crossGymMemberResult.data!.gymId).toBe(secondTenantGym.id);
   });
 
-  test("getting a member with a valid id should pass with 200", async () => {
-    const [newStaff] = await connection
+  test("creating member with same phone number in a DIFFERENT gym should pass (multi-tenant phone isolation)", async () => {
+    const [secondTenantGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "Piassa Branch Gym",
+        slug: "piassa_branch_gym_phone",
+      })
+      .returning();
+
+    const crossGymMemberResult = await userService.createMember(secondTenantGym.id, {
+      name: "Tenant Two Phone Member",
+      phoneNumber: "+251911223344", // Same phone as Bole Branch member
+      email: "piassa.member@gym.et",
+    });
+
+    expect(crossGymMemberResult.ok).toBe(true);
+    expect(crossGymMemberResult.status).toBe(201);
+    expect(crossGymMemberResult.data!.gymId).toBe(secondTenantGym.id);
+  });
+
+  test("creating member should resurrect a soft-deleted member and set isDeleted to false", async () => {
+    const [softDeletedMember] = await connection
       .insert(users)
       .values({
-        name: "member test",
-        gymId: `${gymId}`,
-        phoneNumber: "+251911334444",
-        email: "member@email.com",
+        gymId: primaryGymId,
+        name: "Kenenisa Archived",
+        phoneNumber: "+251911998877",
+        role: "member",
+        isDeleted: true,
+        status: "inactive",
+      })
+      .returning();
+
+    const resurrectResult = await userService.createMember(primaryGymId, {
+      name: "Kenenisa Bekele",
+      phoneNumber: "+251911998877",
+      email: "kenenisa@gym.et",
+    });
+
+    expect(resurrectResult.ok).toBe(true);
+    if (resurrectResult.ok) {
+      expect(resurrectResult.data!.id).toBe(softDeletedMember.id);
+      expect(resurrectResult.data!.name).toBe("Kenenisa Bekele");
+      expect(resurrectResult.data!.isDeleted).toBe(false);
+      expect(resurrectResult.data!.status).toBe("active");
+      expect(resurrectResult.data!.role).toBe("member");
+    }
+  });
+
+  test("creating member should convert an archived staff to member and purge active sessions", async () => {
+    const [archivedCoach] = await connection
+      .insert(users)
+      .values({
+        gymId: primaryGymId,
+        name: "Coach Chala",
+        phoneNumber: "+251911443322",
+        role: "staff",
+        isDeleted: true,
+        status: "inactive",
+      })
+      .returning();
+
+    await connection.insert(sessions).values({
+      id: "session-former-coach-chala",
+      userId: archivedCoach.id,
+      token: "token-former-coach-secret",
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+    });
+
+    const conversionResult = await userService.createMember(primaryGymId, {
+      name: "Chala Customer",
+      phoneNumber: "+251911443322",
+      email: "chala.customer@gym.et",
+    });
+
+    expect(conversionResult.ok).toBe(true);
+    if (conversionResult.ok) {
+      expect(conversionResult.data!.id).toBe(archivedCoach.id);
+      expect(conversionResult.data!.role).toBe("member");
+      expect(conversionResult.data!.isDeleted).toBe(false);
+      expect(conversionResult.data!.status).toBe("active");
+    }
+
+    const lingeringSessions = await connection
+      .select()
+      .from(sessions)
+      .where(eq(sessions.userId, archivedCoach.id));
+
+    expect(lingeringSessions.length).toBe(0);
+  });
+
+  test("cross-tenant access guard: Gym B cannot view, update, or toggle members belonging to Gym A", async () => {
+    const [unauthorizedGym] = await connection
+      .insert(gyms)
+      .values({
+        name: "Unauthorized Gym Branch",
+        slug: "unauthorized_gym_branch",
+      })
+      .returning();
+
+    const [authorizedMember] = await connection
+      .insert(users)
+      .values({
+        gymId: primaryGymId,
+        name: "Derartu Tulu",
+        phoneNumber: "+251911776655",
         role: "member",
       })
       .returning();
 
-    staffId = newStaff.id;
+    // 1. Get member from Gym A using Gym B ID -> 404 NOT_FOUND
+    const crossTenantGetResult = await userService.getMemberById(unauthorizedGym.id, authorizedMember.id);
+    expect(crossTenantGetResult.ok).toBe(false);
+    expect(crossTenantGetResult.status).toBe(404);
 
-    const result = await userService.getMemberById(`${gymId}`, `${staffId}`);
+    // 2. Update member from Gym A using Gym B ID -> 404 NOT_FOUND
+    const crossTenantUpdateResult = await userService.updateMember(
+      unauthorizedGym.id,
+      authorizedMember.id,
+      { name: "Hacked Name" },
+    );
+    expect(crossTenantUpdateResult.ok).toBe(false);
+    expect(crossTenantUpdateResult.status).toBe(404);
 
-    expect(result.ok).toBe(true);
-    expect(result.data!.name).toBe("member test");
-    expect(result.status).toBe(200);
+    // 3. Delete toggle member from Gym A using Gym B ID -> 404 NOT_FOUND
+    const crossTenantDeleteResult = await userService.deleteMemberToggle(
+      unauthorizedGym.id,
+      authorizedMember.id,
+    );
+    expect(crossTenantDeleteResult.ok).toBe(false);
+    expect(crossTenantDeleteResult.status).toBe(404);
+
+    // 4. List members in Gym B -> Must NOT contain member from Gym A
+    const crossTenantListResult = await userService.getAllMembers(unauthorizedGym.id, 1, 20);
+    expect(crossTenantListResult.ok).toBe(true);
+    if (crossTenantListResult.ok) {
+      const foundMember = crossTenantListResult.data.find((m) => m.id === authorizedMember.id);
+      expect(foundMember).toBeUndefined();
+    }
   });
 
-  test("getting a user by id should fail if porvided a wrong user id with a 404", async () => {
-    const result = await userService.getMemberById(
-      `${gymId}`,
+  test("getting all members should pass with 200 and pagination metadata", async () => {
+    const listResult = await userService.getAllMembers(primaryGymId, 1, 20);
+    expect(listResult.ok).toBe(true);
+    expect(listResult.status).toBe(200);
+    expect(listResult.pagination).toBeDefined();
+    expect(listResult.pagination.totalMembers).toBeGreaterThanOrEqual(1);
+    expect(listResult.pagination.limit).toBe(20);
+  });
+
+  test("getting a member with a valid id should pass with 200", async () => {
+    const [activeMember] = await connection
+      .insert(users)
+      .values({
+        name: "Tirunesh Dibaba",
+        gymId: primaryGymId,
+        phoneNumber: "+251911334444",
+        email: "tirunesh@gym.et",
+        role: "member",
+      })
+      .returning();
+
+    const fetchResult = await userService.getMemberById(primaryGymId, activeMember.id);
+
+    expect(fetchResult.ok).toBe(true);
+    expect(fetchResult.data!.name).toBe("Tirunesh Dibaba");
+    expect(fetchResult.status).toBe(200);
+  });
+
+  test("getting a user by id should fail if provided a non-existent UUID with 404", async () => {
+    const nonExistentResult = await userService.getMemberById(
+      primaryGymId,
       "00000000-0000-0000-0000-000000000000",
     );
 
-    expect(result.ok).toBe(false);
-    expect(result.error!.code).toBe("NOT_FOUND");
-    expect(result.status).toBe(404);
+    expect(nonExistentResult.ok).toBe(false);
+    expect(nonExistentResult.error!.code).toBe("NOT_FOUND");
+    expect(nonExistentResult.status).toBe(404);
   });
 
-  test("getting auser with valid id but if the user is a not a member it should fail with 404 not found", async () => {
-    const [newStaff] = await connection
+  test("getting a user with valid id but role is staff should fail with 404 not found", async () => {
+    const [staffCoach] = await connection
       .insert(users)
       .values({
-        name: "staff",
-        gymId: `${gymId}`,
+        name: "Coach Alazar",
+        gymId: primaryGymId,
         phoneNumber: "+251911224444",
-        email: "staff@email.com",
+        email: "coach.alazar@gym.et",
         role: "staff",
       })
       .returning();
 
-    staffId = newStaff.id;
+    const fetchStaffAsMemberResult = await userService.getMemberById(primaryGymId, staffCoach.id);
 
-    const result = await userService.getMemberById(`${gymId}`, `${staffId}`);
-
-    expect(result.ok).toBe(false);
-    expect(result.error!.code).toBe("NOT_FOUND");
-    expect(result.status).toBe(404);
+    expect(fetchStaffAsMemberResult.ok).toBe(false);
+    expect(fetchStaffAsMemberResult.error!.code).toBe("NOT_FOUND");
+    expect(fetchStaffAsMemberResult.status).toBe(404);
   });
 
-  test("getting all members with valid number should pass with 200", async () => {
-    const result = await userService.getAllMembers(
-      `${gymId}`,
+  test("getting all members filtered by valid phone number should pass with 200", async () => {
+    const searchResult = await userService.getAllMembers(
+      primaryGymId,
       1,
       10,
       "0911334444",
     );
 
-    expect(result.ok).toBe(true);
-    expect(result.status).toBe(200);
-    expect(result.data.length).toBeGreaterThanOrEqual(1);
+    expect(searchResult.ok).toBe(true);
+    expect(searchResult.status).toBe(200);
+    expect(searchResult.data.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("getting all members with wrong or non existing filter still should pass with 200", async () => {
-    const result = await userService.getAllMembers(
-      `${gymId}`,
+  test("getting all members with non-matching filter should return empty array and 0 total", async () => {
+    const emptySearchResult = await userService.getAllMembers(
+      primaryGymId,
       1,
       10,
-      "nonn existing filter",
+      "non-matching-phone-or-name-query",
     );
 
-    expect(result.ok).toBe(true);
-    expect(result.status).toBe(200);
-    expect(result.data).toEqual([]);
-    expect(result.pagination.totalMembers).toBe(0);
+    expect(emptySearchResult.ok).toBe(true);
+    expect(emptySearchResult.status).toBe(200);
+    expect(emptySearchResult.data).toEqual([]);
+    expect(emptySearchResult.pagination.totalMembers).toBe(0);
   });
 
-  test("updating member should pass with 200, and with avalid phone and email regex only", async () => {
-    const [testUser] = await connection
+  test("updating member should pass with 200 when provided with valid phone and email", async () => {
+    const [memberToUpdate] = await connection
       .insert(users)
       .values({
-        name: "test user 1",
-        gymId: `${gymId}`,
+        name: "Haile Gebrselassie",
+        gymId: primaryGymId,
         phoneNumber: "+251922334455",
-        email: "testUser1@email.com",
+        email: "haile.original@gym.et",
         role: "member",
       })
       .returning();
-    memberId = testUser.id;
-    const result = await userService.updateMember(`${gymId}`, `${memberId}`, {
-      name: "updated test user 1",
+
+    const updateResult = await userService.updateMember(primaryGymId, memberToUpdate.id, {
+      name: "Haile Gebrselassie Updated",
       phoneNumber: "+251933224455",
-      email: "updateduser@email.com",
+      email: "haile.updated@gym.et",
     });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.phoneNumber).toBe("+251933224455");
-      expect(result.status).toBe(200);
-      expect(result.data.name).toBe("updated test user 1");
-      expect(result.data.email).toBe("updateduser@email.com");
+    expect(updateResult.ok).toBe(true);
+    if (updateResult.ok) {
+      expect(updateResult.data.name).toBe("Haile Gebrselassie Updated");
+      expect(updateResult.data.phoneNumber).toBe("+251933224455");
+      expect(updateResult.data.email).toBe("haile.updated@gym.et");
+      expect(updateResult.status).toBe(200);
     }
   });
 
-  test("update member should fail if provided with invalid id", async () => {
-    const result = await userService.updateMember(
-      `${gymId}`,
+  test("updating member should fail with 404 if provided with non-existent UUID", async () => {
+    const nonExistentUpdateResult = await userService.updateMember(
+      primaryGymId,
       "00000000-0000-0000-0000-000000000000",
       {
-        name: "updated test user 1",
+        name: "Ghost Member",
         phoneNumber: "+251988224455",
-        email: "updatinguser@email.com",
+        email: "ghost@gym.et",
       },
     );
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(404);
-      expect(result.error.code).toBe("NOT_FOUND");
+    expect(nonExistentUpdateResult.ok).toBe(false);
+    if (!nonExistentUpdateResult.ok) {
+      expect(nonExistentUpdateResult.status).toBe(404);
+      expect(nonExistentUpdateResult.error.code).toBe("NOT_FOUND");
     }
   });
 
-  test("updating user should fail if the user is a staff", async () => {
-    const result = await userService.updateMember(`${gymId}`, `${staffId}`, {
-      name: "updated user",
-      phoneNumber: "+251911112266",
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe("NOT_FOUND");
-      expect(result.status).toBe(404);
-    }
-  });
-
-  test("toggle should pass by changing isDeleted to true and false", async () => {
-    const [member] = await connection
+  test("updating user should fail if the target user is a staff member", async () => {
+    const [activeStaff] = await connection
       .insert(users)
       .values({
-        name: "test abebe",
-        gymId: `${gymId}`,
+        name: "Front Desk Staff Member",
+        gymId: primaryGymId,
+        phoneNumber: "+251911112266",
+        role: "staff",
+      })
+      .returning();
+
+    const updateStaffAsMemberResult = await userService.updateMember(primaryGymId, activeStaff.id, {
+      name: "Tampering Staff Name",
+      phoneNumber: "+251911112299",
+    });
+
+    expect(updateStaffAsMemberResult.ok).toBe(false);
+    if (!updateStaffAsMemberResult.ok) {
+      expect(updateStaffAsMemberResult.error.code).toBe("NOT_FOUND");
+      expect(updateStaffAsMemberResult.status).toBe(404);
+    }
+  });
+
+  test("toggle should pass by changing isDeleted to true and back to false", async () => {
+    const [memberToToggle] = await connection
+      .insert(users)
+      .values({
+        name: "Mulugeta Member",
+        gymId: primaryGymId,
         phoneNumber: "+251988998877",
         isDeleted: true,
       })
       .returning();
-    const deletedMemberId = member.id;
-    const result = await userService.deleteMemberToggle(
-      `${gymId}`,
-      `${deletedMemberId}`,
+
+    const toggleResult = await userService.deleteMemberToggle(
+      primaryGymId,
+      memberToToggle.id,
     );
 
-    expect(result.ok).toBe(true);
+    expect(toggleResult.ok).toBe(true);
   });
-  test("if provided with invalid id, delete toggle should fail with 404", async () => {
-    const result = await userService.deleteMemberToggle(
-      `${gymId}`,
+
+  test("delete toggle should fail with 404 if provided with non-existent UUID", async () => {
+    const nonExistentToggleResult = await userService.deleteMemberToggle(
+      primaryGymId,
       "00000000-0000-0000-0000-000000000000",
     );
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe("NOT_FOUND");
-      expect(result?.status).toBe(404);
+    expect(nonExistentToggleResult.ok).toBe(false);
+    if (!nonExistentToggleResult.ok) {
+      expect(nonExistentToggleResult.error.code).toBe("NOT_FOUND");
+      expect(nonExistentToggleResult.status).toBe(404);
     }
   });
 });

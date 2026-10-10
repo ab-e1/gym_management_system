@@ -59,6 +59,10 @@ This is a living, evidence-based record of engineering development for the Gym M
 - **2026-09-14**: Transitioned from `let` re-assignment to the idiomatic Drizzle Array filtering pattern.
 - **2026-09-24**: Independently reasoned about PostgreSQL `UNIQUE` key constraints vs soft-deleted user reactivation (`createStaff` converting soft-deleted members to staff instead of triggering `23505` duplicate key errors).
 - **2026-09-24**: Articulated product-market fit requirements for Ethiopian market context (Phone-first identity, optional email, SMS/OTP workflow).
+- **2026-09-25**: Grasped relational database constraints, CASCADE delete catastrophic failure modes in financial/subscription ledgers vs soft-delete archival, and strictly executed a TDD Red-Green cycle.
+- **2026-10-06**: Demonstrated mastery of explicit privilege transitions (Stripe-style 409 conflict pattern with structured `details` metadata instead of silent privilege escalation), soft-delete session invalidation, and auth gatekeeper lifecycle logic.
+- **2026-10-10**: Designed and implemented atomic multi-table orchestration with transactional client injection (passing `tx` to `recordPayment`), fail-fast precondition ordering ($O(1)$ plan lookup before user scan), and resolved foreign-key cascading teardown in test lifecycle hooks.
+- **2026-10-10**: Caught defensive optional chaining anti-pattern (`user?.id`), correctly reasoning that `staffId` is mandatory for PostgreSQL `NOT NULL` audit constraints on `recorded_by` and advocating for strict boundary validation instead of silent `undefined` propagation.
 
 ---
 

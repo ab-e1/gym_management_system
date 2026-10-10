@@ -33,19 +33,22 @@
 - `notificationChannelEnum`: `"telegram" | "sms"`
 
 ### Core Tables
-1. **`users`**:
-   - Columns: `id` (UUID pk), `name` (text, not null), `phoneNumber` (text, unique), `email` (text, unique, optional), `photoUrl` (text), `role` (roleEnum), `phoneNumberVerified` (boolean), `emailVerified` (boolean), `status` (userStatusEnum), `isDeleted` (boolean, default false), `createdAt`, `updatedAt`.
-   - Index: `user_name_idx` on `name`.
-2. **`membershipPlans`**:
-   - Columns: `id` (UUID pk), `name` (text), `price` (integer, check `price > 0`), `duration` (integer in days, check `duration > 0`), `createdAt`, `updatedAt`.
-3. **`memberships`**:
-   - Columns: `id` (UUID pk), `userId` (fk `users.id`), `planId` (fk `membershipPlans.id`), `startDate`, `endDate`, `status` (membershipStatusEnum), `lastNotifiedDay`, `createdAt`, `updatedAt`.
-   - Indexes: `memberships_user_id_idx`, `memberships_end_date_status_idx`.
+36: 1. **`users`**:
+37:    - Columns: `id` (UUID pk), `name` (text, not null), `phoneNumber` (text, not null), `email` (text, optional), `photoUrl` (text), `role` (roleEnum), `phoneNumberVerified` (boolean), `emailVerified` (boolean), `status` (userStatusEnum), `isDeleted` (boolean, default false), `createdAt`, `updatedAt`.
+38:    - Indexes & Constraints: `user_name_idx` on `name`, `user_gym_id_idx` on `gymId`, `user_phone_unique_per_gym` unique on `(gymId, phoneNumber)`, `user_email_unique_per_gym` unique on `(gymId, email)`, `user_all_members_idx` on `(gymId, role, isDeleted)`, `user_all_active_members` on `(gymId, role, isDeleted, status)`.
+39: 2. **`membershipPlans`**:
+40:    - Columns: `id` (UUID pk), `name` (text), `price` (integer, check `price > 0`), `duration` (integer in days, check `duration > 0`), `isDeleted` (boolean, default false), `createdAt`, `updatedAt`.
+41: 3. **`memberships`**:
+42:    - Columns: `id` (UUID pk), `userId` (fk `users.id`), `planId` (fk `membershipPlans.id`), `startDate`, `endDate`, `status` (membershipStatusEnum), `lastNotifiedDay`, `isDeleted` (boolean, default false), `createdAt`, `updatedAt`.
+43:    - Indexes: `memberships_gym_id_idx` (`gymId`), `memberships_user_id_idx` (`userId`), `memberships_auto_expire_idx` (`gymId, status, endDate`), `memberships_user_active_idx` (`gymId, userId, status, endDate`), `memberships_gym_user_deleted_idx` (`gymId, userId, isDeleted`).
+44:    - Strategy: Transactional Concurrency Control with Pessimistic Row Locking (`.for("update")`) inside `connection.transaction` for renewal stacking. Dynamic Computed Expiration — status evaluated at query time against `endDate < NOW()`, eliminating DB write locks on read APIs.
 4. **`payments`**:
    - Columns: `id` (UUID pk), `membershipId` (fk `memberships.id`), `amount` (check `amount > 0`), `paymentMethod` (paymentMethodEnum), `recordedBy` (fk `users.id`), `paidAt`.
 5. **`notificationLog`**:
    - Columns: `id` (UUID pk), `membershipId`, `type`, `channel`, `sentAt`, `status`.
-6. **Better Auth Tables**:
+6. **`gym`**:
+   - Columns: `id` (UUID pk), `name` (text), `slug` (text, unique), `status` (userStatusEnum), `isDeleted` (boolean, default false), `createdAt`, `updatedAt`.
+7. **Better Auth Tables**:
    - `sessions`: `id` (text), `userId` (UUID fk `users.id`), `token` (unique), `expiresAt`, `ipAddress`, `userAgent`, `createdAt`, `updatedAt`.
    - `accounts`: `id` (text), `userId` (UUID fk `users.id`), `accountId`, `providerId`, `password`, etc.
    - `verifications`: `id` (text), `identifier` (text), `value` (text), `expiresAt`, `createdAt`, `updatedAt`.
@@ -99,33 +102,49 @@
 | `GET` | `/api/v1/members/:id` | `staff`, `owner` | Get member details by ID |
 | `PATCH` | `/api/v1/members/:id` | `staff`, `owner` | Update member details |
 | `DELETE` | `/api/v1/members/:id` | `staff`, `owner` | Soft-delete / reactivate member toggle |
-| `POST` | `/api/v1/staff` | `owner` | Register staff (or reactivate soft-deleted user) |
+| `POST` | `/api/v1/staff` | `owner` | Register staff (fails with 409 + details if member/archived staff exists) |
+| `POST` | `/api/v1/staff/:id/promote` | `owner` | Explicitly promote active member to staff role |
+| `POST` | `/api/v1/staff/:id/rehire` | `owner` | Rehire archived/soft-deleted staff (`status: active`, `isDeleted: false`) |
 | `GET` | `/api/v1/staff` | `owner` | List staff members with pagination & search |
 | `GET` | `/api/v1/staff/:id` | `owner` | Get staff details by ID |
 | `PATCH` | `/api/v1/staff/:id` | `owner` | Update staff details |
-| `DELETE` | `/api/v1/staff/:id` | `owner` | Soft-delete / reactivate staff toggle |
+| `DELETE` | `/api/v1/staff/:id` | `owner` | Soft-delete / reactivate staff toggle (purges active sessions on delete) |
 | `POST` | `/api/v1/plans` | `owner` | Create membership plan |
 | `GET` | `/api/v1/plans` | `staff`, `owner` | List active membership plans |
 | `GET` | `/api/v1/plans/:id` | `staff`, `owner` | Get plan details by ID |
 | `PATCH` | `/api/v1/plans/:id` | `owner` | Update plan details |
 | `DELETE` | `/api/v1/plans/:id` | `owner` | Soft-delete / delete plan toggle |
+| `POST` | `/api/v1/membership` | `staff`, `owner` | Create active membership for member with smart renewal stacking |
+| `GET` | `/api/v1/membership` | `staff`, `owner` | List memberships with pagination, status filter & userId filter |
+| `GET` | `/api/v1/membership/:id` | `staff`, `owner` | Get single membership details by ID |
+| `PATCH` | `/api/v1/membership/:id` | `staff`, `owner` | Update membership status (`active`, `expired`, `cancelled`) |
+| `DELETE` | `/api/v1/membership/:id` | `staff`, `owner` | Soft-delete / recover membership toggle |
+| `POST` | `/api/v1/enrollment` | `staff`, `owner` | Fast atomic enrollment (user + membership + payment in 1 transaction) |
 
 ---
 
-## 6. Test Suite Status (109 Passing Tests)
+## 6. Test Suite Status (198 Passing Multi-Tenant Tests)
 
 Run with: `bun test --maxConcurrency=1`
 
-- `src/tests/unit/zSchema/user.schema.test.ts` (6 pass)
+- `src/tests/unit/response.test.ts` (3 pass - failure with details)
+- `src/tests/unit/zSchema/user.schema.test.ts` (9 pass - status enum & normalization)
 - `src/tests/unit/zSchema/plan.schema.test.ts` (11 pass)
-- `src/tests/integration/member.service.test.ts` (13 pass)
-- `src/tests/integration/plan.service.test.ts` (14 pass)
-- `src/tests/integration/staff.service.test.ts` (15 pass)
+- `src/tests/unit/zSchema/membership.schema.test.ts` (16 pass)
+- `src/tests/unit/zSchema/enrollment.schema.test.ts` (9 pass - UUID plan validation & payment enum)
+- `src/tests/integration/member.service.test.ts` (18 pass - cross-tenant isolation, soft-delete resurrection & demotion)
+- `src/tests/integration/staff.service.test.ts` (20 pass - promote, rehire, session nuke, 409 conflict details)
+- `src/tests/integration/plan.service.test.ts` (13 pass)
+- `src/tests/integration/membership.service.test.ts` (15 pass - inner join soft-delete gate & concurrency stacking)
+- `src/tests/integration/enrollment.service.test.ts` (4 pass - atomic user, membership, and payment transaction orchestration)
 - `src/tests/e2e/member.api.test.ts` (21 pass)
-- `src/tests/e2e/plan.api.test.ts` (12 pass)
-- `src/tests/e2e/staff.api.test.ts` (17 pass)
+- `src/tests/e2e/staff.api.test.ts` (23 pass - RBAC 403, promote, rehire, conflict details)
+- `src/tests/e2e/plan.api.test.ts` (17 pass)
+- `src/tests/e2e/membership.api.test.ts` (9 pass)
+- `src/tests/e2e/enrollment.api.test.ts` (10 pass - RBAC, validation, conflict, and atomic creation)
 
----
+*Audit Reference*: Complete QA & Forensic Audit verified on October 10, 2026. Status: PASSED (100% green).
+
 
 ## 7. Critical Domain Constraints & Edge Cases Handled
 1. **Soft-Delete Unique Constraint Collision**:
@@ -135,6 +154,10 @@ Run with: `bun test --maxConcurrency=1`
    - DB wipe (`delete(table)`) and seeding must be placed **inside `beforeAll()`** hooks, not top-level in test files, to prevent premature wiping before execution.
 3. **Query vs Body Schema Validation**:
    - HTTP GET routes pass `target: "query"` to `validate(paginationQuerySchema, "query")` so `c.req.query()` is parsed instead of `c.req.json()`.
+4. **Foreign Key Integrity via Soft Delete (Plans & Memberships)**:
+   - `membershipPlans` are soft-deleted (`isDeleted = true`) and toggled rather than hard-deleted.
+   - Deleting a plan that has active or past member contracts in `memberships` succeeds without triggering PostgreSQL error `23503` (`foreign_key_violation`).
+   - `getAllPlans()` and `getPlanById()` strictly query `where(eq(membershipPlans.isDeleted, false))`.
 
 ---
 
