@@ -2,7 +2,22 @@ import * as p from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const roleEnum = p.pgEnum("role", ["staff", "member", "owner"]);
-export const userStatusEnum = p.pgEnum("user_status", ["active", "inactive"]);
+export const userStatusEnum = p.pgEnum("user_status", [
+  "active",
+  "inactive",
+  "banned",
+]);
+export const gymStaffRoleEnum = p.pgEnum("gym_staff_role", [
+  "owner",
+  "admin",
+  "staff",
+  "coach",
+]);
+export const gymStaffStatusEnum = p.pgEnum("gym_staff_status", [
+  "active",
+  "suspended",
+]);
+
 export const membershipStatusEnum = p.pgEnum("membership_status", [
   "active",
   "expired",
@@ -25,21 +40,89 @@ export const notificationChannelEnum = p.pgEnum("notification_channel", [
   "sms",
 ]);
 
+// 1. TENANT ROOT
+export const gyms = p.pgTable("gyms", {
+  id: p.uuid("id").defaultRandom().primaryKey(),
+  name: p.text("name").notNull(),
+  slug: p.text("slug").notNull().unique(),
+  status: userStatusEnum("status").default("active").notNull(),
+  isDeleted: p.boolean("is_deleted").default(false).notNull(),
+  createdAt: p.timestamp("created_at").defaultNow().notNull(),
+  updatedAt: p
+    .timestamp("updated_at")
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+// 2. GLOBAL AUTHENTICATED IDENTITIES (Better Auth - Staff / Owners / Coaches only)
 export const users = p.pgTable(
   "users",
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
+    name: p.text("name").notNull(),
+    phoneNumber: p.text("phone").notNull().unique(),
+    email: p.text("email").unique(),
+    photoUrl: p.text("photo_url"),
+    phoneNumberVerified: p.boolean("phone_verified").default(false).notNull(),
+    emailVerified: p.boolean("email_verified").default(false).notNull(),
+    status: userStatusEnum("status").default("active").notNull(),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    p.index("user_name_idx").on(table.name),
+    p.index("user_phone_idx").on(table.phoneNumber),
+  ],
+);
+
+// 3. WORKPLACE BADGES (Multi-Tenant staff pivot)
+export const gymStaff = p.pgTable(
+  "gym_staff",
+  {
+    id: p.uuid("id").defaultRandom().primaryKey(),
     gymId: p
       .uuid("gym_id")
-      .references(() => gyms.id)
+      .references(() => gyms.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: p
+      .uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    name: p.text("name"), // Per-gym badge/display name (e.g., "Coach Dawit - Boxing")
+    role: gymStaffRoleEnum("role").default("staff").notNull(),
+    status: gymStaffStatusEnum("status").default("active").notNull(),
+    isDeleted: p.boolean("is_deleted").default(false).notNull(),
+    createdAt: p.timestamp("created_at").defaultNow().notNull(),
+    updatedAt: p
+      .timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    p.unique("gym_staff_gym_user_unique").on(table.gymId, table.userId),
+    p.index("gym_staff_gym_id_idx").on(table.gymId),
+    p.index("gym_staff_user_id_idx").on(table.userId),
+  ],
+);
+
+// 4. CUSTOMER CRM (Gym Members / Walk-ins)
+export const members = p.pgTable(
+  "members",
+  {
+    id: p.uuid("id").defaultRandom().primaryKey(),
+    gymId: p
+      .uuid("gym_id")
+      .references(() => gyms.id, { onDelete: "cascade" })
       .notNull(),
     name: p.text("name").notNull(),
     phoneNumber: p.text("phone").notNull(),
     email: p.text("email"),
     photoUrl: p.text("photo_url"),
-    role: roleEnum("role").default("member").notNull(),
-    phoneNumberVerified: p.boolean("phone_verified").default(false).notNull(),
-    emailVerified: p.boolean("email_verified").default(false).notNull(),
     status: userStatusEnum("status").default("active").notNull(),
     isDeleted: p.boolean("is_deleted").default(false).notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
@@ -50,16 +133,14 @@ export const users = p.pgTable(
       .notNull(),
   },
   (table) => [
-    p.index("user_name_idx").on(table.name),
-    p.index("user_gym_id_idx").on(table.gymId),
-    p.unique("user_phone_unique_per_gym").on(table.gymId, table.phoneNumber),
-    p.unique("user_email_unique_per_gym").on(table.gymId, table.email),
+    p.unique("member_phone_unique_per_gym").on(table.gymId, table.phoneNumber),
+    p.unique("member_email_unique_per_gym").on(table.gymId, table.email),
+    p.index("member_gym_id_idx").on(table.gymId),
+    p.index("member_name_idx").on(table.name),
+    p.index("member_phone_idx").on(table.phoneNumber),
     p
-      .index("user_all_members_idx")
-      .on(table.gymId, table.role, table.isDeleted),
-    p
-      .index("user_all_active_members")
-      .on(table.gymId, table.role, table.isDeleted, table.status),
+      .index("member_active_status_idx")
+      .on(table.gymId, table.isDeleted, table.status),
   ],
 );
 
@@ -84,8 +165,11 @@ export const membershipPlans = p.pgTable(
   },
   (table) => [
     p.index("membershipPlans_gym_id_idx").on(table.gymId),
+    p
+      .unique("membership_plans_name_unique_per_gym")
+      .on(table.gymId, table.name),
     p.check("price_positive_check", sql`${table.price} > 0`),
-    p.check("duration_postive_check", sql`${table.duration} > 0`),
+    p.check("duration_positive_check", sql`${table.duration} > 0`),
   ],
 );
 
@@ -93,9 +177,9 @@ export const memberships = p.pgTable(
   "memberships",
   {
     id: p.uuid("id").defaultRandom().primaryKey(),
-    userId: p
-      .uuid("user_id")
-      .references(() => users.id)
+    memberId: p
+      .uuid("member_id")
+      .references(() => members.id, { onDelete: "cascade" })
       .notNull(),
     gymId: p
       .uuid("gym_id")
@@ -119,16 +203,16 @@ export const memberships = p.pgTable(
   },
   (table) => [
     p.index("memberships_gym_id_idx").on(table.gymId),
-    p.index("memberships_user_id_idx").on(table.userId),
+    p.index("memberships_member_id_idx").on(table.memberId),
     p
       .index("memberships_auto_expire_idx")
       .on(table.gymId, table.status, table.endDate),
     p
-      .index("memberships_user_active_idx")
-      .on(table.gymId, table.userId, table.status, table.endDate),
+      .index("memberships_member_active_idx")
+      .on(table.gymId, table.memberId, table.status, table.endDate),
     p
-      .index("memberships_gym_user_deleted_idx")
-      .on(table.gymId, table.userId, table.isDeleted),
+      .index("memberships_gym_member_deleted_idx")
+      .on(table.gymId, table.memberId, table.isDeleted),
   ],
 );
 
@@ -211,18 +295,6 @@ export const leads = p.pgTable(
   ],
 );
 
-export const gyms = p.pgTable("gyms", {
-  id: p.uuid("id").defaultRandom().primaryKey(),
-  name: p.text("name").notNull(),
-  slug: p.text("slug").notNull().unique(),
-  status: userStatusEnum("status").default("active").notNull(),
-  isDeleted: p.boolean("is_deleted").default(false).notNull(),
-  createdAt: p.timestamp("created_at").defaultNow().notNull(),
-  updatedAt: p
-    .timestamp("updated_at")
-    .$onUpdate(() => new Date())
-    .notNull(),
-});
 // ─────────────────────────────────────────────
 // BETTER AUTH TABLES
 // ─────────────────────────────────────────────
@@ -233,11 +305,14 @@ export const gyms = p.pgTable("gyms", {
 export const sessions = p.pgTable(
   "sessions",
   {
-    id: p.text("id").primaryKey(),
+    id: p.uuid("id").defaultRandom().primaryKey(),
     userId: p
       .uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    activeGymId: p
+      .uuid("active_gym_id")
+      .references(() => gyms.id, { onDelete: "set null" }),
     token: p.text("token").notNull().unique(),
     expiresAt: p.timestamp("expires_at").notNull(),
     ipAddress: p.text("ip_address"),
@@ -248,7 +323,10 @@ export const sessions = p.pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [p.index("session_user_id_idx").on(table.userId)],
+  (table) => [
+    p.index("session_user_id_idx").on(table.userId),
+    p.index("session_active_gym_id_idx").on(table.activeGymId),
+  ],
 );
 
 // 8. ACCOUNT TABLE
@@ -257,7 +335,7 @@ export const sessions = p.pgTable(
 export const accounts = p.pgTable(
   "accounts",
   {
-    id: p.text("id").primaryKey(),
+    id: p.uuid("id").defaultRandom().primaryKey(),
     userId: p
       .uuid("user_id")
       .notNull()
@@ -287,9 +365,10 @@ export const accounts = p.pgTable(
 export const verifications = p.pgTable(
   "verifications",
   {
-    id: p.text("id").primaryKey(),
-    identifier: p.text("identifier").notNull(),
+    id: p.uuid("id").defaultRandom().primaryKey(),
+    identifier: p.text("identifier").notNull().unique(),
     value: p.text("value").notNull(),
+    attempt: p.integer("attempt").default(0).notNull(),
     expiresAt: p.timestamp("expires_at").notNull(),
     createdAt: p.timestamp("created_at").defaultNow().notNull(),
     updatedAt: p

@@ -71,6 +71,26 @@ describe("plan Zod schema validation", () => {
     expect(result.success).toBe(false);
   });
 
+  test("should fail if price is a floating point number", () => {
+    const input = {
+      name: "tori",
+      price: 199.99,
+      duration: 30,
+    };
+    const result = planSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  test("should fail if duration is a floating point number", () => {
+    const input = {
+      name: "tori",
+      price: 2000,
+      duration: 30.5,
+    };
+    const result = planSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
   test("updateschema should pass if provided with only valid price", () => {
     const input = {
       price: 20,

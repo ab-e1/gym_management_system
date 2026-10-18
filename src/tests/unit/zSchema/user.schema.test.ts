@@ -72,6 +72,11 @@ describe("user schema unit test", () => {
     expect(result.success).toBe(true);
   });
 
+  test("updateMemberSchema should pass for valid status: banned", () => {
+    const result = updateMemberSchema.safeParse({ status: "banned" });
+    expect(result.success).toBe(true);
+  });
+
   test("updateMemberSchema should fail for invalid status string", () => {
     const result = updateMemberSchema.safeParse({ status: "actuve" });
     expect(result.success).toBe(false);
