@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { failure, success } from "../utils/response.ts";
 import * as membershipServices from "../services/membership.service.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { isValidUUID } from "../utils/helpers.ts";
 
 export const createMembership = async (c: Context) => {
   const body = c.get("validData");
@@ -34,10 +35,10 @@ export const getMembershipById = async (c: Context) => {
   const gymId = c.get("gymId");
   const id = c.req.param("id");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "membership Id is required" },
+      { code: "BAD_REQUEST", message: "A valid membership UUID is required" },
       400 as ContentfulStatusCode,
     );
   }
@@ -54,10 +55,10 @@ export const updateMembershipStatus = async (c: Context) => {
   const id = c.req.param("id");
   const body = c.get("validData");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "Membership ID is required" },
+      { code: "BAD_REQUEST", message: "A valid membership UUID is required" },
       400 as ContentfulStatusCode,
     );
   }
@@ -78,10 +79,10 @@ export const deleteMembershipToggle = async (c: Context) => {
   const gymId = c.get("gymId");
   const id = c.req.param("id");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "membership Id is required" },
+      { code: "BAD_REQUEST", message: "A valid membership UUID is required" },
       400 as ContentfulStatusCode,
     );
   }

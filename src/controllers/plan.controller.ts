@@ -2,6 +2,7 @@ import { success, failure } from "../utils/response.ts";
 import type { Context } from "hono";
 import * as planServices from "../services/plan.service.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { isValidUUID } from "../utils/helpers.ts";
 
 export const createPlan = async (c: Context) => {
   const body = c.get("validData");
@@ -29,10 +30,10 @@ export const getPlanById = async (c: Context) => {
   const id = c.req.param("id");
   const gymId = c.get("gymId");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "plan Id is required" },
+      { code: "BAD_REQUEST", message: "A valid plan UUID is required" },
       400 as ContentfulStatusCode,
     );
   }
@@ -50,10 +51,10 @@ export const updatePlan = async (c: Context) => {
   const id = c.req.param("id");
   const gymId = c.get("gymId");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "plan Id is required" },
+      { code: "BAD_REQUEST", message: "A valid plan UUID is required" },
       400 as ContentfulStatusCode,
     );
   }
@@ -70,10 +71,10 @@ export const deletePlan = async (c: Context) => {
   const id = c.req.param("id");
   const gymId = c.get("gymId");
 
-  if (!id) {
+  if (!isValidUUID(id)) {
     return failure(
       c,
-      { code: "BAD_REQUEST", message: "plan Id is required" },
+      { code: "BAD_REQUEST", message: "A valid plan UUID is required" },
       400 as ContentfulStatusCode,
     );
   }

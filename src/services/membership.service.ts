@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, lt, or } from "drizzle-orm";
 import { connection } from "../config/connection.ts";
-import { membershipPlans, memberships, users } from "../db/schema.ts";
+import { membershipPlans, memberships, members } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export const createMembership = async (
@@ -15,13 +15,12 @@ export const createMembership = async (
     // 1. Validate target member exists in this gym
     const [targetUser] = await tx
       .select()
-      .from(users)
+      .from(members)
       .where(
         and(
-          eq(users.id, data.userId),
-          eq(users.gymId, gymId),
-          eq(users.role, "member"),
-          eq(users.isDeleted, false),
+          eq(members.id, data.userId),
+          eq(members.gymId, gymId),
+          eq(members.isDeleted, false),
         ),
       )
       .for("update");
@@ -34,6 +33,17 @@ export const createMembership = async (
           message: "Active member not found with the provided userId",
         },
         status: 404 as ContentfulStatusCode,
+      };
+    }
+    if (targetUser.status === "banned") {
+      return {
+        ok: false as const,
+        error: {
+          code: "FORBIDDEN",
+          message:
+            "User is banned. Contact the owner to resolve the issue before issuing a membership.",
+        },
+        status: 403 as ContentfulStatusCode,
       };
     }
 
@@ -68,7 +78,7 @@ export const createMembership = async (
       .from(memberships)
       .where(
         and(
-          eq(memberships.userId, data.userId),
+          eq(memberships.memberId, data.userId),
           eq(memberships.gymId, gymId),
           eq(memberships.status, "active"),
           gte(memberships.endDate, now),
@@ -90,18 +100,19 @@ export const createMembership = async (
     const endDate = new Date(
       startDate.getTime() + targetPlan.duration * 24 * 60 * 60 * 1000,
     );
+    endDate.setHours(23, 59, 59, 999);
     if (targetUser.status === "inactive") {
       await tx
-        .update(users)
+        .update(members)
         .set({ status: "active" })
-        .where(and(eq(users.id, data.userId), eq(users.gymId, gymId)));
+        .where(and(eq(members.id, data.userId), eq(members.gymId, gymId)));
     }
 
     const [newMembership] = await tx
       .insert(memberships)
       .values({
         gymId,
-        userId: data.userId,
+        memberId: data.userId,
         planId: data.planId,
         startDate,
         endDate,
@@ -152,7 +163,7 @@ export const getAllMemberships = async (
   }
 
   if (userIdFilter) {
-    conditions.push(eq(memberships.userId, userIdFilter));
+    conditions.push(eq(memberships.memberId, userIdFilter));
   }
 
   const filterCondition = and(...conditions);
@@ -160,15 +171,30 @@ export const getAllMemberships = async (
   const [{ total }] = await connection
     .select({ total: count() })
     .from(memberships)
+    .innerJoin(
+      members,
+      and(
+        eq(memberships.memberId, members.id),
+        eq(members.gymId, gymId),
+        eq(members.isDeleted, false),
+      ),
+    )
+    .leftJoin(
+      membershipPlans,
+      and(
+        eq(memberships.planId, membershipPlans.id),
+        eq(membershipPlans.gymId, gymId),
+      ),
+    )
     .where(filterCondition);
 
   const rawRecords = await connection
     .select({
       id: memberships.id,
       gymId: memberships.gymId,
-      userId: memberships.userId,
-      memberName: users.name,
-      memberPhone: users.phoneNumber,
+      userId: memberships.memberId,
+      memberName: members.name,
+      memberPhone: members.phoneNumber,
       planId: memberships.planId,
       planName: membershipPlans.name,
       planPrice: membershipPlans.price,
@@ -180,22 +206,22 @@ export const getAllMemberships = async (
     })
     .from(memberships)
     .innerJoin(
-      users,
+      members,
       and(
-        eq(memberships.userId, users.id),
-        eq(users.gymId, gymId),
-        eq(users.isDeleted, false),
+        eq(memberships.memberId, members.id),
+        eq(members.gymId, gymId),
+        eq(members.isDeleted, false),
       ),
     )
-    .innerJoin(
+    .leftJoin(
       membershipPlans,
       and(
         eq(memberships.planId, membershipPlans.id),
         eq(membershipPlans.gymId, gymId),
-        eq(membershipPlans.isDeleted, false),
       ),
     )
     .where(filterCondition)
+    .orderBy(desc(memberships.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -220,6 +246,7 @@ export const getAllMemberships = async (
     ok: true as const,
     data: records,
     pagination: {
+      total: totalCount,
       totalMemberships: totalCount,
       page,
       limit,
@@ -236,9 +263,9 @@ export const getMembershipById = async (gymId: string, id: string) => {
     .select({
       id: memberships.id,
       gymId: memberships.gymId,
-      userId: memberships.userId,
-      memberName: users.name,
-      memberPhone: users.phoneNumber,
+      userId: memberships.memberId,
+      memberName: members.name,
+      memberPhone: members.phoneNumber,
       planId: memberships.planId,
       planName: membershipPlans.name,
       planPrice: membershipPlans.price,
@@ -250,19 +277,18 @@ export const getMembershipById = async (gymId: string, id: string) => {
     })
     .from(memberships)
     .innerJoin(
-      users,
+      members,
       and(
-        eq(memberships.userId, users.id),
-        eq(users.gymId, gymId),
-        eq(users.isDeleted, false),
+        eq(memberships.memberId, members.id),
+        eq(members.gymId, gymId),
+        eq(members.isDeleted, false),
       ),
     )
-    .innerJoin(
+    .leftJoin(
       membershipPlans,
       and(
         eq(memberships.planId, membershipPlans.id),
         eq(membershipPlans.gymId, gymId),
-        eq(membershipPlans.isDeleted, false),
       ),
     )
     .where(

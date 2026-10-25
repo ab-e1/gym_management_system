@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import * as staffServices from "../services/users/staff.service.ts";
 import { failure, success } from "../utils/response";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { isValidUUID } from "../utils/helpers.ts";
 
 export const createStaff = async (c: Context) => {
   const body = c.get("validData");
@@ -23,8 +25,17 @@ export const getAllStaff = async (c: Context) => {
 };
 
 export const getStaffById = async (c: Context) => {
-  const id = String(c.req.param("id"));
+  const id = c.req.param("id");
   const gymId = c.get("gymId");
+
+  if (!isValidUUID(id)) {
+    return failure(
+      c,
+      { code: "BAD_REQUEST", message: "A valid staff UUID is required" },
+      400 as ContentfulStatusCode,
+    );
+  }
+
   const result = await staffServices.getStaffById(gymId, id);
   if (!result.ok) {
     return failure(c, result.error, result.status);
@@ -33,9 +44,18 @@ export const getStaffById = async (c: Context) => {
 };
 
 export const updateStaff = async (c: Context) => {
-  const id = String(c.req.param("id"));
+  const id = c.req.param("id");
   const gymId = c.get("gymId");
   const body = c.get("validData");
+
+  if (!isValidUUID(id)) {
+    return failure(
+      c,
+      { code: "BAD_REQUEST", message: "A valid staff UUID is required" },
+      400 as ContentfulStatusCode,
+    );
+  }
+
   const result = await staffServices.updateStaff(gymId, id, body);
 
   if (!result.ok) {
@@ -45,8 +65,17 @@ export const updateStaff = async (c: Context) => {
 };
 
 export const deleteStaffToggle = async (c: Context) => {
-  const id = String(c.req.param("id"));
+  const id = c.req.param("id");
   const gymId = c.get("gymId");
+
+  if (!isValidUUID(id)) {
+    return failure(
+      c,
+      { code: "BAD_REQUEST", message: "A valid staff UUID is required" },
+      400 as ContentfulStatusCode,
+    );
+  }
+
   const result = await staffServices.deleteStaffToggle(gymId, id);
 
   if (!result.ok) {
@@ -56,8 +85,16 @@ export const deleteStaffToggle = async (c: Context) => {
 };
 
 export const promoteMemberToStaff = async (c: Context) => {
-  const id = String(c.req.param("id"));
+  const id = c.req.param("id");
   const gymId = c.get("gymId");
+
+  if (!isValidUUID(id)) {
+    return failure(
+      c,
+      { code: "BAD_REQUEST", message: "A valid member UUID is required" },
+      400 as ContentfulStatusCode,
+    );
+  }
 
   const result = await staffServices.promoteMemberToStaff(gymId, id);
   if (!result.ok) {
@@ -67,8 +104,16 @@ export const promoteMemberToStaff = async (c: Context) => {
 };
 
 export const rehireStaff = async (c: Context) => {
-  const id = String(c.req.param("id"));
+  const id = c.req.param("id");
   const gymId = c.get("gymId");
+
+  if (!isValidUUID(id)) {
+    return failure(
+      c,
+      { code: "BAD_REQUEST", message: "A valid staff UUID is required" },
+      400 as ContentfulStatusCode,
+    );
+  }
 
   const result = await staffServices.rehireStaff(gymId, id);
   if (!result.ok) {
