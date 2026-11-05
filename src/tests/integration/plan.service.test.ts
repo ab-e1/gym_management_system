@@ -1,7 +1,16 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import * as planSevices from "../../services/plan.service.ts";
 import { connection } from "../../config/connection.ts";
-import { gyms, membershipPlans, memberships, payments, users } from "../../db/schema.ts";
+import {
+  gyms,
+  gymStaff,
+  members,
+  membershipPlans,
+  memberships,
+  payments,
+  sessions,
+  users,
+} from "../../db/schema.ts";
 import { eq, and } from "drizzle-orm";
 
 describe("plan service integration tests", () => {
@@ -13,7 +22,12 @@ describe("plan service integration tests", () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
+    await connection.delete(gyms);
+
     [gymTest] = await connection
       .insert(gyms)
       .values({
@@ -180,14 +194,14 @@ describe("plan service integration tests", () => {
   });
 
   test("soft-deleting a plan with an active membership reference should succeed without FK violation", async () => {
-    // 1. Create a user
-    const [user] = await connection
-      .insert(users)
+    // 1. Create a member in the gym
+    const [member] = await connection
+      .insert(members)
       .values({
+        gymId,
         name: "FK Test Member",
-        gymId: `${gymId}`,
         phoneNumber: "+251977112233",
-        role: "member",
+        status: "active",
       })
       .returning();
 
@@ -202,7 +216,7 @@ describe("plan service integration tests", () => {
 
     // 3. Create a membership referencing this plan
     await connection.insert(memberships).values({
-      userId: user.id,
+      memberId: member.id,
       gymId: `${gymId}`,
       planId: planId,
       startDate: new Date(),
@@ -244,6 +258,10 @@ describe("plan service integration tests", () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
+    await connection.delete(gyms);
   });
 });

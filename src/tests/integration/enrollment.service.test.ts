@@ -1,17 +1,28 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
 import { enrollment } from "../../services/enrollment.service.ts";
-import { gyms, membershipPlans, memberships, payments, users } from "../../db/schema";
+import {
+  gyms,
+  gymStaff,
+  members,
+  membershipPlans,
+  memberships,
+  payments,
+  users,
+} from "../../db/schema.ts";
 
 describe("integration test for the enrollment service", async () => {
   let planId: string;
   let gymId: string;
   let staffId: string;
   const invalidId = "123e4567-e89b-12d3-a456-426614174000";
+
   beforeAll(async () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
 
@@ -27,23 +38,27 @@ describe("integration test for the enrollment service", async () => {
     const [testStaff] = await connection
       .insert(users)
       .values({
-        gymId: gymId,
         name: "tolosa staff",
         phoneNumber: "+251911998877",
         email: "staff@tolosa.com",
-        role: "staff",
       })
       .returning();
     staffId = testStaff.id;
 
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: staffId,
+      role: "staff",
+      status: "active",
+    });
+
     await connection
-      .insert(users)
+      .insert(members)
       .values({
         gymId: gymId,
         name: "tolosa's first member",
         phoneNumber: "+251922334455",
         email: "tolosa@email.com",
-        role: "member",
       })
       .returning();
 
@@ -59,10 +74,13 @@ describe("integration test for the enrollment service", async () => {
 
     planId = testPlan.id;
   });
+
   afterAll(async () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
   });
@@ -98,9 +116,12 @@ describe("integration test for the enrollment service", async () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.newMember.phoneNumber).toBe("+251943223344");
-      expect(result.data.newMember.role).toBe("member");
       expect(result.data.newMembership.planId).toBe(planId);
       expect(result.data.newMembership.status).toBe("active");
+      const endDateObj = new Date(result.data.newMembership.endDate);
+      expect(endDateObj.getHours()).toBe(23);
+      expect(endDateObj.getMinutes()).toBe(59);
+      expect(endDateObj.getSeconds()).toBe(59);
       expect(result.data.newMembershipPayment.amount).toBe(2500);
       expect(result.data.newMembershipPayment.paymentMethod).toBe("telebirr");
       expect(result.data.newMembershipPayment.referenceCode).toBe("FT2610A87B92");
@@ -141,6 +162,103 @@ describe("integration test for the enrollment service", async () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result?.error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  test("test should resurrect soft-deleted member and create membership + payment", async () => {
+    const [softDeleted] = await connection
+      .insert(members)
+      .values({
+        gymId,
+        name: "Old Archived Member",
+        phoneNumber: "+251918273645",
+        email: "old.archived@gym.et",
+        isDeleted: true,
+        status: "inactive",
+      })
+      .returning();
+
+    const result = await enrollment(
+      gymId,
+      staffId,
+      planId,
+      {
+        name: "Old Member Returning",
+        phoneNumber: "+251918273645",
+      },
+      { amount: 2500, paymentMethod: "cash" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.newMember.id).toBe(softDeleted.id);
+      expect(result.data.newMember.isDeleted).toBe(false);
+      expect(result.data.newMember.status).toBe("active");
+      expect(result.data.newMembership.memberId).toBe(softDeleted.id);
+      expect(result.data.newMembership.status).toBe("active");
+      expect(result.data.newMembershipPayment.amount).toBe(2500);
+    }
+  });
+
+  test("test should fail with 403 FORBIDDEN if the member attempting enrollment is banned", async () => {
+    await connection
+      .insert(members)
+      .values({
+        gymId,
+        name: "Banned Member Trying Enrollment",
+        phoneNumber: "+251988776655",
+        status: "banned",
+      });
+
+    const result = await enrollment(
+      gymId,
+      staffId,
+      planId,
+      {
+        name: "Banned Member",
+        phoneNumber: "+251988776655",
+      },
+      { amount: 2500, paymentMethod: "cash" },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.error.code).toBe("FORBIDDEN");
+    }
+  });
+
+  test("test should fail with 409 CONFLICT if resurrecting soft-deleted member with email used by another user", async () => {
+    // Insert a soft deleted member
+    await connection
+      .insert(members)
+      .values({
+        gymId,
+        name: "Soft Deleted With Separate Email",
+        phoneNumber: "+251977112233",
+        email: "original.resurrect@gym.et",
+        isDeleted: true,
+        status: "inactive",
+      });
+
+    // Attempt resurrection with email "tolosa@email.com" (which already belongs to tolosa's first member)
+    const result = await enrollment(
+      gymId,
+      staffId,
+      planId,
+      {
+        name: "Resurrected Member With Colliding Email",
+        phoneNumber: "+251977112233",
+        email: "tolosa@email.com",
+      },
+      { amount: 2500, paymentMethod: "cash" },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.error.code).toBe("CONFLICT");
+      expect(result.error.message).toBe("email is already in use by another person");
     }
   });
 });

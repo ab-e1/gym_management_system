@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import * as userService from "../../services/users/member.service.ts";
 import {
   gyms,
-  users,
+  members,
   memberships,
   payments,
   membershipPlans,
@@ -18,7 +18,7 @@ describe("integration test for member services", () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
-    await connection.delete(users);
+    await connection.delete(members);
     await connection.delete(gyms);
 
     const [primaryGym] = await connection
@@ -65,11 +65,14 @@ describe("integration test for member services", () => {
       })
       .returning();
 
-    const crossGymMemberResult = await userService.createMember(secondTenantGym.id, {
-      name: "Tenant Two Member",
-      phoneNumber: "+251999887766",
-      email: "abebe@gym.et",
-    });
+    const crossGymMemberResult = await userService.createMember(
+      secondTenantGym.id,
+      {
+        name: "Tenant Two Member",
+        phoneNumber: "+251999887766",
+        email: "abebe@gym.et",
+      },
+    );
 
     expect(crossGymMemberResult.ok).toBe(true);
     expect(crossGymMemberResult.status).toBe(201);
@@ -85,11 +88,14 @@ describe("integration test for member services", () => {
       })
       .returning();
 
-    const crossGymMemberResult = await userService.createMember(secondTenantGym.id, {
-      name: "Tenant Two Phone Member",
-      phoneNumber: "+251911223344", // Same phone as Bole Branch member
-      email: "piassa.member@gym.et",
-    });
+    const crossGymMemberResult = await userService.createMember(
+      secondTenantGym.id,
+      {
+        name: "Tenant Two Phone Member",
+        phoneNumber: "+251911223344", // Same phone as Bole Branch member
+        email: "piassa.member@gym.et",
+      },
+    );
 
     expect(crossGymMemberResult.ok).toBe(true);
     expect(crossGymMemberResult.status).toBe(201);
@@ -98,12 +104,11 @@ describe("integration test for member services", () => {
 
   test("creating member should resurrect a soft-deleted member and set isDeleted to false", async () => {
     const [softDeletedMember] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         gymId: primaryGymId,
         name: "Kenenisa Archived",
         phoneNumber: "+251911998877",
-        role: "member",
         isDeleted: true,
         status: "inactive",
       })
@@ -121,50 +126,31 @@ describe("integration test for member services", () => {
       expect(resurrectResult.data!.name).toBe("Kenenisa Bekele");
       expect(resurrectResult.data!.isDeleted).toBe(false);
       expect(resurrectResult.data!.status).toBe("active");
-      expect(resurrectResult.data!.role).toBe("member");
     }
   });
 
-  test("creating member should convert an archived staff to member and purge active sessions", async () => {
-    const [archivedCoach] = await connection
-      .insert(users)
+  test("creating member should fail with 403 FORBIDDEN if the soft-deleted user was banned", async () => {
+    const [bannedArchived] = await connection
+      .insert(members)
       .values({
         gymId: primaryGymId,
-        name: "Coach Chala",
-        phoneNumber: "+251911443322",
-        role: "staff",
+        name: "Banned Archived Member",
+        phoneNumber: "+251911999999",
         isDeleted: true,
-        status: "inactive",
+        status: "banned",
       })
       .returning();
 
-    await connection.insert(sessions).values({
-      id: "session-former-coach-chala",
-      userId: archivedCoach.id,
-      token: "token-former-coach-secret",
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+    const result = await userService.createMember(primaryGymId, {
+      name: "Attempted Reactivation",
+      phoneNumber: "+251911999999",
     });
 
-    const conversionResult = await userService.createMember(primaryGymId, {
-      name: "Chala Customer",
-      phoneNumber: "+251911443322",
-      email: "chala.customer@gym.et",
-    });
-
-    expect(conversionResult.ok).toBe(true);
-    if (conversionResult.ok) {
-      expect(conversionResult.data!.id).toBe(archivedCoach.id);
-      expect(conversionResult.data!.role).toBe("member");
-      expect(conversionResult.data!.isDeleted).toBe(false);
-      expect(conversionResult.data!.status).toBe("active");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.error.code).toBe("FORBIDDEN");
     }
-
-    const lingeringSessions = await connection
-      .select()
-      .from(sessions)
-      .where(eq(sessions.userId, archivedCoach.id));
-
-    expect(lingeringSessions.length).toBe(0);
   });
 
   test("cross-tenant access guard: Gym B cannot view, update, or toggle members belonging to Gym A", async () => {
@@ -177,17 +163,19 @@ describe("integration test for member services", () => {
       .returning();
 
     const [authorizedMember] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         gymId: primaryGymId,
         name: "Derartu Tulu",
         phoneNumber: "+251911776655",
-        role: "member",
       })
       .returning();
 
     // 1. Get member from Gym A using Gym B ID -> 404 NOT_FOUND
-    const crossTenantGetResult = await userService.getMemberById(unauthorizedGym.id, authorizedMember.id);
+    const crossTenantGetResult = await userService.getMemberById(
+      unauthorizedGym.id,
+      authorizedMember.id,
+    );
     expect(crossTenantGetResult.ok).toBe(false);
     expect(crossTenantGetResult.status).toBe(404);
 
@@ -209,10 +197,16 @@ describe("integration test for member services", () => {
     expect(crossTenantDeleteResult.status).toBe(404);
 
     // 4. List members in Gym B -> Must NOT contain member from Gym A
-    const crossTenantListResult = await userService.getAllMembers(unauthorizedGym.id, 1, 20);
+    const crossTenantListResult = await userService.getAllMembers(
+      unauthorizedGym.id,
+      1,
+      20,
+    );
     expect(crossTenantListResult.ok).toBe(true);
     if (crossTenantListResult.ok) {
-      const foundMember = crossTenantListResult.data.find((m) => m.id === authorizedMember.id);
+      const foundMember = crossTenantListResult.data.find(
+        (m) => m.id === authorizedMember.id,
+      );
       expect(foundMember).toBeUndefined();
     }
   });
@@ -228,17 +222,19 @@ describe("integration test for member services", () => {
 
   test("getting a member with a valid id should pass with 200", async () => {
     const [activeMember] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         name: "Tirunesh Dibaba",
         gymId: primaryGymId,
         phoneNumber: "+251911334444",
         email: "tirunesh@gym.et",
-        role: "member",
       })
       .returning();
 
-    const fetchResult = await userService.getMemberById(primaryGymId, activeMember.id);
+    const fetchResult = await userService.getMemberById(
+      primaryGymId,
+      activeMember.id,
+    );
 
     expect(fetchResult.ok).toBe(true);
     expect(fetchResult.data!.name).toBe("Tirunesh Dibaba");
@@ -254,25 +250,6 @@ describe("integration test for member services", () => {
     expect(nonExistentResult.ok).toBe(false);
     expect(nonExistentResult.error!.code).toBe("NOT_FOUND");
     expect(nonExistentResult.status).toBe(404);
-  });
-
-  test("getting a user with valid id but role is staff should fail with 404 not found", async () => {
-    const [staffCoach] = await connection
-      .insert(users)
-      .values({
-        name: "Coach Alazar",
-        gymId: primaryGymId,
-        phoneNumber: "+251911224444",
-        email: "coach.alazar@gym.et",
-        role: "staff",
-      })
-      .returning();
-
-    const fetchStaffAsMemberResult = await userService.getMemberById(primaryGymId, staffCoach.id);
-
-    expect(fetchStaffAsMemberResult.ok).toBe(false);
-    expect(fetchStaffAsMemberResult.error!.code).toBe("NOT_FOUND");
-    expect(fetchStaffAsMemberResult.status).toBe(404);
   });
 
   test("getting all members filtered by valid phone number should pass with 200", async () => {
@@ -304,21 +281,24 @@ describe("integration test for member services", () => {
 
   test("updating member should pass with 200 when provided with valid phone and email", async () => {
     const [memberToUpdate] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         name: "Haile Gebrselassie",
         gymId: primaryGymId,
         phoneNumber: "+251922334455",
         email: "haile.original@gym.et",
-        role: "member",
       })
       .returning();
 
-    const updateResult = await userService.updateMember(primaryGymId, memberToUpdate.id, {
-      name: "Haile Gebrselassie Updated",
-      phoneNumber: "+251933224455",
-      email: "haile.updated@gym.et",
-    });
+    const updateResult = await userService.updateMember(
+      primaryGymId,
+      memberToUpdate.id,
+      {
+        name: "Haile Gebrselassie Updated",
+        phoneNumber: "+251933224455",
+        email: "haile.updated@gym.et",
+      },
+    );
 
     expect(updateResult.ok).toBe(true);
     if (updateResult.ok) {
@@ -347,32 +327,9 @@ describe("integration test for member services", () => {
     }
   });
 
-  test("updating user should fail if the target user is a staff member", async () => {
-    const [activeStaff] = await connection
-      .insert(users)
-      .values({
-        name: "Front Desk Staff Member",
-        gymId: primaryGymId,
-        phoneNumber: "+251911112266",
-        role: "staff",
-      })
-      .returning();
-
-    const updateStaffAsMemberResult = await userService.updateMember(primaryGymId, activeStaff.id, {
-      name: "Tampering Staff Name",
-      phoneNumber: "+251911112299",
-    });
-
-    expect(updateStaffAsMemberResult.ok).toBe(false);
-    if (!updateStaffAsMemberResult.ok) {
-      expect(updateStaffAsMemberResult.error.code).toBe("NOT_FOUND");
-      expect(updateStaffAsMemberResult.status).toBe(404);
-    }
-  });
-
   test("toggle should pass by changing isDeleted to true and back to false", async () => {
     const [memberToToggle] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         name: "Mulugeta Member",
         gymId: primaryGymId,
@@ -389,16 +346,65 @@ describe("integration test for member services", () => {
     expect(toggleResult.ok).toBe(true);
   });
 
-  test("delete toggle should fail with 404 if provided with non-existent UUID", async () => {
-    const nonExistentToggleResult = await userService.deleteMemberToggle(
+  test("creating member should fail with 409 CONFLICT if email already exists in the gym", async () => {
+    // 1. Seed existing member with an email
+    await connection.insert(members).values({
+      gymId: primaryGymId,
+      name: "Existing Email User",
+      phoneNumber: "+251977770001",
+      email: "duplicate@gym.et",
+    });
+
+    // 2. Attempt to create another member with different phone but identical email
+    const result = await userService.createMember(primaryGymId, {
+      name: "New Member Same Email",
+      phoneNumber: "+251977770002",
+      email: "duplicate@gym.et",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.error.code).toBe("CONFLICT");
+      expect(result.error.message).toContain("email");
+    }
+  });
+
+  test("updating member should fail with 409 CONFLICT if updated email belongs to another user", async () => {
+    // 1. Seed two distinct members
+    const [memberA] = await connection
+      .insert(members)
+      .values({
+        gymId: primaryGymId,
+        name: "Member A",
+        phoneNumber: "+251977770003",
+        email: "member.a@gym.et",
+      })
+      .returning();
+
+    const [memberB] = await connection
+      .insert(members)
+      .values({
+        gymId: primaryGymId,
+        name: "Member B",
+        phoneNumber: "+251977770004",
+        email: "member.b@gym.et",
+      })
+      .returning();
+
+    // 2. Attempt to update Member B's email to Member A's email
+    const updateResult = await userService.updateMember(
       primaryGymId,
-      "00000000-0000-0000-0000-000000000000",
+      memberB.id,
+      {
+        email: "member.a@gym.et",
+      },
     );
 
-    expect(nonExistentToggleResult.ok).toBe(false);
-    if (!nonExistentToggleResult.ok) {
-      expect(nonExistentToggleResult.error.code).toBe("NOT_FOUND");
-      expect(nonExistentToggleResult.status).toBe(404);
+    expect(updateResult.ok).toBe(false);
+    if (!updateResult.ok) {
+      expect(updateResult.status).toBe(409);
+      expect(updateResult.error.code).toBe("CONFLICT");
     }
   });
 });

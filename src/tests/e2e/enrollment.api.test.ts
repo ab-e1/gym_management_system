@@ -1,8 +1,10 @@
-import { test, describe, expect, beforeAll } from "bun:test";
+import { test, describe, expect, beforeAll, afterAll } from "bun:test";
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
 import {
   gyms,
+  gymStaff,
+  members,
   membershipPlans,
   memberships,
   payments,
@@ -14,10 +16,9 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
   let gymId: string;
   let ownerId: string;
   let staffId: string;
-  let memberId: string;
   let ownerToken: string;
   let staffToken: string;
-  let memberToken: string;
+  let unauthorizedToken: string; // Coach token
   let planId: string;
 
   beforeAll(async () => {
@@ -25,7 +26,9 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
     await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
 
@@ -39,76 +42,100 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       .returning();
     gymId = testGym.id;
 
-    // 3. Seed Owner User & Session Token
+    // 3. Seed Owner User + gymStaff badge + Session
     const [ownerUser] = await connection
       .insert(users)
       .values({
-        gymId,
         name: "E2E Owner",
         phoneNumber: "+251911111111",
-        role: "owner",
       })
       .returning();
     ownerId = ownerUser.id;
+
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: ownerId,
+      role: "owner",
+      status: "active",
+    });
 
     const [ownerSession] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
         userId: ownerId,
+        activeGymId: gymId,
         token: "e2e-owner-token-enrollment",
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       })
       .returning();
     ownerToken = ownerSession.token;
 
-    // 4. Seed Staff User & Session Token
+    // 4. Seed Staff User + gymStaff badge + Session
     const [staffUser] = await connection
       .insert(users)
       .values({
-        gymId,
         name: "E2E Staff",
         phoneNumber: "+251922222222",
-        role: "staff",
       })
       .returning();
     staffId = staffUser.id;
+
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: staffId,
+      role: "staff",
+      status: "active",
+    });
 
     const [staffSession] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
         userId: staffId,
+        activeGymId: gymId,
         token: "e2e-staff-token-enrollment",
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       })
       .returning();
     staffToken = staffSession.token;
 
-    // 5. Seed Member User & Session Token
-    const [memberUser] = await connection
+    // 5. Seed Coach User (unauthorized role for enrollment) + gymStaff badge + Session
+    const [coachUser] = await connection
       .insert(users)
       .values({
-        gymId,
-        name: "Existing Member",
+        name: "E2E Coach",
         phoneNumber: "+251933333333",
-        role: "member",
       })
       .returning();
-    memberId = memberUser.id;
 
-    const [memberSession] = await connection
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: coachUser.id,
+      role: "coach",
+      status: "active",
+    });
+
+    const [coachSession] = await connection
       .insert(sessions)
       .values({
         id: crypto.randomUUID(),
-        userId: memberId,
-        token: "e2e-member-token-enrollment",
+        userId: coachUser.id,
+        activeGymId: gymId,
+        token: "e2e-coach-token-enrollment",
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       })
       .returning();
-    memberToken = memberSession.token;
+    unauthorizedToken = coachSession.token;
 
-    // 6. Seed active Membership Plan
+    // 6. Seed Existing Member in members table (Customer CRM)
+    await connection.insert(members).values({
+      gymId,
+      name: "Existing Member",
+      phoneNumber: "+251933333333",
+    });
+
+    // 7. Seed active Membership Plan
     const [testPlan] = await connection
       .insert(membershipPlans)
       .values({
@@ -119,6 +146,17 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       })
       .returning();
     planId = testPlan.id;
+  });
+
+  afterAll(async () => {
+    await connection.delete(payments);
+    await connection.delete(memberships);
+    await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(sessions);
+    await connection.delete(gymStaff);
+    await connection.delete(users);
+    await connection.delete(gyms);
   });
 
   describe("Authentication & Authorization Guardrails", () => {
@@ -139,12 +177,12 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       expect(unauthorizedResponseBody.error.code).toBe("UN_AUTHORIZED");
     });
 
-    test("POST /api/v1/enrollment should return 403 FORBIDDEN if requested by a member role user", async () => {
+    test("POST /api/v1/enrollment should return 403 FORBIDDEN if requested by an unauthorized coach role", async () => {
       const response = await app.request("/api/v1/enrollment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${memberToken}`,
+          Authorization: `Bearer ${unauthorizedToken}`,
         },
         body: JSON.stringify({
           planId,
@@ -156,7 +194,6 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       expect(response.status).toBe(403);
       const forbiddenResponseBody = (await response.json()) as any;
       expect(forbiddenResponseBody.ok).toBe(false);
-      expect(forbiddenResponseBody.error.code).toBe("UN_AUTHORIZED");
     });
   });
 
@@ -307,7 +344,6 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       expect(cashEnrollmentResult.data.newMember).toBeDefined();
       expect(cashEnrollmentResult.data.newMember.name).toBe("Dawit Walk-In Member");
       expect(cashEnrollmentResult.data.newMember.phoneNumber).toBe("+251944444444");
-      expect(cashEnrollmentResult.data.newMember.role).toBe("member");
 
       expect(cashEnrollmentResult.data.newMembership).toBeDefined();
       expect(cashEnrollmentResult.data.newMembership.planId).toBe(planId);

@@ -2,43 +2,108 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
 import {
+  gyms,
+  gymStaff,
+  members,
   membershipPlans,
   memberships,
   payments,
   sessions,
   users,
-  gyms,
-} from "../../db/schema";
+} from "../../db/schema.ts";
 
 describe("test for the whole plan route", () => {
-  let createdId: string;
   let gymId: string;
-  let testGym: any;
+  let ownerToken: string;
+  let staffToken: string;
 
   beforeAll(async () => {
+    // 1. Wipe in reverse dependency order
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
     await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
 
-    [testGym] = await connection
+    // 2. Seed Test Gym
+    const [testGym] = await connection
       .insert(gyms)
       .values({
         name: "gym_1_test_api",
         slug: "slug_of_gym_one_api",
       })
       .returning();
-
     gymId = testGym.id;
+
+    // 3. Seed Owner User + gymStaff badge + Session
+    const [ownerUser] = await connection
+      .insert(users)
+      .values({
+        name: "owner test",
+        phoneNumber: "+251911223344",
+        phoneNumberVerified: true,
+      })
+      .returning();
+
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: ownerUser.id,
+      role: "owner",
+      status: "active",
+    });
+
+    const [ownerSession] = await connection
+      .insert(sessions)
+      .values({
+        id: crypto.randomUUID(),
+        userId: ownerUser.id,
+        activeGymId: gymId,
+        token: "test-owner-session-token",
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      })
+      .returning();
+    ownerToken = ownerSession.token;
+
+    // 4. Seed Staff User + gymStaff badge + Session
+    const [staffUser] = await connection
+      .insert(users)
+      .values({
+        name: "staff test",
+        phoneNumber: "+251911333344",
+        phoneNumberVerified: true,
+      })
+      .returning();
+
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: staffUser.id,
+      role: "staff",
+      status: "active",
+    });
+
+    const [staffSession] = await connection
+      .insert(sessions)
+      .values({
+        id: crypto.randomUUID(),
+        userId: staffUser.id,
+        activeGymId: gymId,
+        token: "test-staff-session-token",
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      })
+      .returning();
+    staffToken = staffSession.token;
   });
 
   afterAll(async () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
     await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
   });
@@ -60,34 +125,11 @@ describe("test for the whole plan route", () => {
   });
 
   test("POST /api/v1/plans - should pass wiht owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner test",
-        gymId: `${gymId}`,
-        email: "owner email",
-        phoneNumber: "0911223344",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     const res = await app.request("/api/v1/plans", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
       body: JSON.stringify({
         name: "gold plan",
@@ -102,37 +144,14 @@ describe("test for the whole plan route", () => {
   });
 
   test("POST /api/v1/plans - should fail with 403 forbidden with out owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff test",
-        gymId: `${gymId}`,
-        email: "staff@email.com",
-        phoneNumber: "0911333344",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     const res = await app.request("/api/v1/plans", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
       body: JSON.stringify({
-        name: "gold plan",
+        name: "gold plan 2",
         price: 4000,
         duration: 30,
       }),
@@ -143,35 +162,11 @@ describe("test for the whole plan route", () => {
   });
 
   test("GET /api/v1/plans - should pass with 200 with/without owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff test",
-        gymId: `${gymId}`,
-
-        email: "staff22@email.com",
-        phoneNumber: "0922903344",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff!!-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     const res = await app.request("/api/v1/plans", {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
     });
     expect(res.status).toBe(200);
@@ -180,48 +175,21 @@ describe("test for the whole plan route", () => {
   });
 
   test("DELETE /api/v1/plans/:id - should fail with 403 without owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff3 test",
-        gymId: `${gymId}`,
-
-        email: "staff11@email.com",
-        phoneNumber: "0911111111",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff!@@-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test plan",
+        gymId,
+        name: "test plan for delete 403",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
     });
     expect(res.status).toBe(403);
@@ -230,48 +198,21 @@ describe("test for the whole plan route", () => {
   });
 
   test("DELETE /api/v1/plans/:id - should pass with 200 with owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner2 test",
-        gymId: `${gymId}`,
-
-        email: "owner2@email.com",
-        phoneNumber: "0922222222",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff!@@!-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test2 plan",
+        gymId,
+        name: "test2 plan for delete 200",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
     });
     expect(res.status).toBe(200);
@@ -280,99 +221,45 @@ describe("test for the whole plan route", () => {
   });
 
   test("GET /api/v1/plans/:id - should pass with 200 with/without owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff3 test",
-        gymId: `${gymId}`,
-
-        email: "staff333@email.com",
-        phoneNumber: "0933333333",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff33-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test33 plan",
+        gymId,
+        name: "test33 plan for get by id",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.ok).toBe(true);
-    expect(body.data.name).toBe("test33 plan");
+    expect(body.data.name).toBe("test33 plan for get by id");
   });
 
   test("UPDATE /api/v1/plans/:id - should fail with 403 without owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff4 test",
-        gymId: `${gymId}`,
-
-        email: "staff44@email.com",
-        phoneNumber: "0955555555",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff55-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test55 plan",
+        gymId,
+        name: "test55 plan update 403",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
       body: JSON.stringify({
         name: "test55 updated plan",
@@ -385,48 +272,21 @@ describe("test for the whole plan route", () => {
   });
 
   test("UPDATE /api/v1/plans/:id - should pass with 200 with owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner4 test",
-        gymId: `${gymId}`,
-
-        email: "owner4@email.com",
-        phoneNumber: "0955554444",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner45-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test45 plan",
+        gymId,
+        name: "test45 plan update 200",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
       body: JSON.stringify({
         name: "test55 updated plan",
@@ -442,35 +302,11 @@ describe("test for the whole plan route", () => {
   });
 
   test("POST /api/v1/plans - should fail with 400 with empty/ invalid body wiht owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner123 test",
-        gymId: `${gymId}`,
-
-        email: "owner123@email",
-        phoneNumber: "091335344",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner123-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     const res = await app.request("/api/v1/plans", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
       body: JSON.stringify({}),
     });
@@ -480,50 +316,13 @@ describe("test for the whole plan route", () => {
   });
 
   test("UPDATE /api/v1/plans/:id - should fail with 404 if provided a wornf id with owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner6 test",
-        gymId: `${gymId}`,
-
-        email: "owne64@email.com",
-        phoneNumber: "09564554444",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner645-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
-      .insert(membershipPlans)
-      .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test45 plan",
-        price: 2000,
-        duration: 30,
-      })
-      .returning();
-
-    createdId = testMembersipPlan.id;
-
     const res = await app.request(
       `/api/v1/plans/00000000-0000-0000-0000-000000000000`,
       {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${testSesssion.token}`,
+          Authorization: `Bearer ${ownerToken}`,
         },
         body: JSON.stringify({
           name: "test55 updated plan",
@@ -538,50 +337,13 @@ describe("test for the whole plan route", () => {
   });
 
   test("DELETE /api/v1/plans/:id - should pass fail 404 when provided a wrong id with owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner77 test",
-        gymId: `${gymId}`,
-
-        email: "owner77@email.com",
-        phoneNumber: "0977777776",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff77-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
-      .insert(membershipPlans)
-      .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test2 plan",
-        price: 2000,
-        duration: 30,
-      })
-      .returning();
-
-    createdId = testMembersipPlan.id;
-
     const res = await app.request(
       `/api/v1/plans/00000000-0000-0000-0000-000000000000`,
       {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${testSesssion.token}`,
+          Authorization: `Bearer ${ownerToken}`,
         },
       },
     );
@@ -592,50 +354,13 @@ describe("test for the whole plan route", () => {
   });
 
   test("GET /api/v1/plans/:id - should pass with 200 with/without owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff993 test",
-        gymId: `${gymId}`,
-
-        email: "staff993@email.com",
-        phoneNumber: "099999999",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff993-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
-      .insert(membershipPlans)
-      .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test33 plan",
-        price: 2000,
-        duration: 30,
-      })
-      .returning();
-
-    createdId = testMembersipPlan.id;
-
     const res = await app.request(
       `/api/v1/plans/00000000-0000-0000-0000-000000000000`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${testSesssion.token}`,
+          Authorization: `Bearer ${staffToken}`,
         },
       },
     );
@@ -646,48 +371,21 @@ describe("test for the whole plan route", () => {
   });
 
   test("UPDATE /api/v1/plans/:id - should fail with 400 if provided a empty body with owner role", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner98 test",
-        gymId: `${gymId}`,
-
-        email: "owne984@email.com",
-        phoneNumber: "09564598444",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSesssion] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner9085-session-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-    const [testMembersipPlan] = await connection
+    const [testMembershipPlan] = await connection
       .insert(membershipPlans)
       .values({
-        id: crypto.randomUUID(),
-        gymId: `${gymId}`,
-
-        name: "test45 plan",
+        gymId,
+        name: "test plan for empty update",
         price: 2000,
         duration: 30,
       })
       .returning();
 
-    createdId = testMembersipPlan.id;
-
-    const res = await app.request(`/api/v1/plans/${createdId}`, {
+    const res = await app.request(`/api/v1/plans/${testMembershipPlan.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSesssion.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
       body: JSON.stringify({}),
     });
@@ -697,34 +395,10 @@ describe("test for the whole plan route", () => {
   });
 
   test("GET /api/v1/plans?page=1&limit=2 - should return paginated plans and pagination metadata", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "staff pagination test",
-        gymId: `${gymId}`,
-
-        email: "staff_page@email.com",
-        phoneNumber: "0988888888",
-        role: "staff",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSession] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-staff-page-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     const res = await app.request("/api/v1/plans?page=1&limit=2", {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${testSession.token}`,
+        Authorization: `Bearer ${staffToken}`,
       },
     });
 
@@ -741,34 +415,8 @@ describe("test for the whole plan route", () => {
   });
 
   test("POST /api/v1/plans - should fail with 409 conflict when creating duplicate plan name", async () => {
-    const testUser = await connection
-      .insert(users)
-      .values({
-        name: "owner duplicate plan test",
-        gymId: `${gymId}`,
-
-        email: "owner_dup_plan@email.com",
-        phoneNumber: "0999112233",
-        role: "owner",
-        phoneNumberVerified: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    const [testSession] = await connection
-      .insert(sessions)
-      .values({
-        id: crypto.randomUUID(),
-        userId: testUser[0].id,
-        token: "test-owner-dup-plan-token",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-      })
-      .returning();
-
     await connection.insert(membershipPlans).values({
-      id: crypto.randomUUID(),
-      gymId: `${gymId}`,
-
+      gymId,
       name: "VIP Premium Plan",
       price: 10000,
       duration: 30,
@@ -778,7 +426,7 @@ describe("test for the whole plan route", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${testSession.token}`,
+        Authorization: `Bearer ${ownerToken}`,
       },
       body: JSON.stringify({
         name: "VIP Premium Plan",

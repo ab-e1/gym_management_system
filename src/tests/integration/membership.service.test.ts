@@ -1,7 +1,17 @@
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { eq } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
 import * as membershipService from "../../services/membership.service.ts";
-import { gyms, membershipPlans, memberships, payments, sessions, users } from "../../db/schema.ts";
+import {
+  gyms,
+  gymStaff,
+  members,
+  membershipPlans,
+  memberships,
+  payments,
+  sessions,
+  users,
+} from "../../db/schema.ts";
 
 describe("membership service integration tests (TDD)", () => {
   let gymId: string;
@@ -14,7 +24,9 @@ describe("membership service integration tests (TDD)", () => {
     await connection.delete(payments);
     await connection.delete(memberships);
     await connection.delete(membershipPlans);
+    await connection.delete(members);
     await connection.delete(sessions);
+    await connection.delete(gymStaff);
     await connection.delete(users);
     await connection.delete(gyms);
 
@@ -28,29 +40,33 @@ describe("membership service integration tests (TDD)", () => {
       .returning();
     gymId = gym.id;
 
-    // 3. Seed test member user
+    // 3. Seed test CRM member
     const [member] = await connection
-      .insert(users)
+      .insert(members)
       .values({
         gymId,
         name: "Abebe Bikila",
         phoneNumber: "+251911000001",
-        role: "member",
       })
       .returning();
     memberId = member.id;
 
-    // 4. Seed test staff user (to test role restriction validation)
+    // 4. Seed test operator/staff user (to test role restriction validation)
     const [staff] = await connection
       .insert(users)
       .values({
-        gymId,
         name: "Staff User",
         phoneNumber: "+251911000002",
-        role: "staff",
       })
       .returning();
     staffId = staff.id;
+
+    await connection.insert(gymStaff).values({
+      gymId,
+      userId: staffId,
+      role: "staff",
+      status: "active",
+    });
 
     // 5. Seed test 30-day membership plan
     const [plan] = await connection
@@ -63,6 +79,17 @@ describe("membership service integration tests (TDD)", () => {
       })
       .returning();
     planId = plan.id;
+  });
+
+  afterAll(async () => {
+    await connection.delete(payments);
+    await connection.delete(memberships);
+    await connection.delete(membershipPlans);
+    await connection.delete(members);
+    await connection.delete(sessions);
+    await connection.delete(gymStaff);
+    await connection.delete(users);
+    await connection.delete(gyms);
   });
 
   describe("createMembership", () => {
@@ -78,12 +105,18 @@ describe("membership service integration tests (TDD)", () => {
       if (result.ok) {
         expect(result.status).toBe(201);
         expect(result.data.gymId).toBe(gymId);
-        expect(result.data.userId).toBe(memberId);
+        expect(result.data.memberId).toBe(memberId);
         expect(result.data.planId).toBe(planId);
         expect(result.data.status).toBe("active");
 
         const expectedEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
         expect(new Date(result.data.endDate).getDate()).toBe(expectedEndDate.getDate());
+
+        // Verify end-of-day normalization (23:59:59.999)
+        const endDateObj = new Date(result.data.endDate);
+        expect(endDateObj.getHours()).toBe(23);
+        expect(endDateObj.getMinutes()).toBe(59);
+        expect(endDateObj.getSeconds()).toBe(59);
       }
     });
 
@@ -113,7 +146,30 @@ describe("membership service integration tests (TDD)", () => {
       }
     });
 
-    test("should fail with 404 NOT_FOUND if target user is a staff role (not member)", async () => {
+    test("should fail with 403 FORBIDDEN if target member is banned", async () => {
+      const [bannedUser] = await connection
+        .insert(members)
+        .values({
+          gymId,
+          name: "Banned Gym Member",
+          phoneNumber: "+251977889900",
+          status: "banned",
+        })
+        .returning();
+
+      const result = await membershipService.createMembership(gymId, {
+        userId: bannedUser.id,
+        planId: planId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.status).toBe(403);
+        expect(result.error.code).toBe("FORBIDDEN");
+      }
+    });
+
+    test("should fail with 404 NOT_FOUND if target user is an operator staff (not a CRM member)", async () => {
       const result = await membershipService.createMembership(gymId, {
         userId: staffId,
         planId: planId,
@@ -156,12 +212,11 @@ describe("membership service integration tests (TDD)", () => {
     test("should handle concurrent membership creation requests without race conditions", async () => {
       // 1. Seed fresh member
       const [concurrentMember] = await connection
-        .insert(users)
+        .insert(members)
         .values({
           gymId,
           name: "Concurrent Member",
           phoneNumber: "+251911777777",
-          role: "member",
         })
         .returning();
 
@@ -193,15 +248,26 @@ describe("membership service integration tests (TDD)", () => {
   });
 
   describe("getAllMemberships", () => {
-    test("should return paginated memberships joined with member and plan details", async () => {
+    test("should return paginated memberships joined with member and plan details in desc createdAt order", async () => {
       const result = await membershipService.getAllMemberships(gymId, 1, 10);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.status).toBe(200);
         expect(result.data.length).toBeGreaterThanOrEqual(1);
-        expect(result.data[0].memberName).toBe("Abebe Bikila");
-        expect(result.data[0].planName).toBe("Monthly Pass");
+
+        // Verify Abebe Bikila is present in the dataset
+        const abebe = result.data.find((m) => m.memberName === "Abebe Bikila");
+        expect(abebe).toBeDefined();
+        expect(abebe?.planName).toBe("Monthly Pass");
+
+        // Verify deterministic descending order by createdAt
+        for (let i = 0; i < result.data.length - 1; i++) {
+          const current = new Date(result.data[i].createdAt).getTime();
+          const next = new Date(result.data[i + 1].createdAt).getTime();
+          expect(current).toBeGreaterThanOrEqual(next);
+        }
+
         expect(result.pagination.totalMemberships).toBeGreaterThanOrEqual(1);
       }
     });
@@ -225,7 +291,7 @@ describe("membership service integration tests (TDD)", () => {
         .insert(memberships)
         .values({
           gymId,
-          userId: memberId,
+          memberId: memberId,
           planId: planId,
           startDate: pastStart,
           endDate: pastEnd,
@@ -260,14 +326,13 @@ describe("membership service integration tests (TDD)", () => {
     });
 
     test("should exclude memberships of soft-deleted users (inner join gate)", async () => {
-      // 1. Seed soft-deleted member user
+      // 1. Seed soft-deleted CRM member
       const [deletedMember] = await connection
-        .insert(users)
+        .insert(members)
         .values({
           gymId,
           name: "Deleted Member",
           phoneNumber: "+251911999999",
-          role: "member",
           isDeleted: true,
         })
         .returning();
@@ -277,7 +342,7 @@ describe("membership service integration tests (TDD)", () => {
         .insert(memberships)
         .values({
           gymId,
-          userId: deletedMember.id,
+          memberId: deletedMember.id,
           planId: planId,
           startDate: new Date(),
           endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -300,6 +365,56 @@ describe("membership service integration tests (TDD)", () => {
         expect(found).toBeUndefined();
       }
     });
+
+    test("should preserve historical memberships and plan details when a plan is soft-deleted/retired", async () => {
+      // 1. Create a special promo plan that will be retired
+      const [promoPlan] = await connection
+        .insert(membershipPlans)
+        .values({
+          gymId,
+          name: "Summer Promo 2025",
+          price: 1500,
+          duration: 30,
+        })
+        .returning();
+
+      // 2. Issue a membership under this plan
+      const [promoMembership] = await connection
+        .insert(memberships)
+        .values({
+          gymId,
+          memberId: memberId,
+          planId: promoPlan.id,
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: "active",
+        })
+        .returning();
+
+      // 3. Soft-delete the plan (retire it)
+      await connection
+        .update(membershipPlans)
+        .set({ isDeleted: true })
+        .where(eq(membershipPlans.id, promoPlan.id));
+
+      // 4. getMembershipById should STILL succeed and preserve planName
+      const singleResult = await membershipService.getMembershipById(gymId, promoMembership.id);
+      expect(singleResult.ok).toBe(true);
+      if (singleResult.ok) {
+        expect(singleResult.data.id).toBe(promoMembership.id);
+        expect(singleResult.data.planName).toBe("Summer Promo 2025");
+        expect(singleResult.data.planPrice).toBe(1500);
+      }
+
+      // 5. getAllMemberships should also STILL include this membership
+      const listResult = await membershipService.getAllMemberships(gymId, 1, 50);
+      expect(listResult.ok).toBe(true);
+      if (listResult.ok) {
+        const found = listResult.data.find((m) => m.id === promoMembership.id);
+        expect(found).toBeDefined();
+        expect(found?.planName).toBe("Summer Promo 2025");
+      }
+    });
   });
 
   describe("getMembershipById", () => {
@@ -314,7 +429,7 @@ describe("membership service integration tests (TDD)", () => {
         expect(result.ok).toBe(true);
         if (result.ok) {
           expect(result.data.id).toBe(targetId);
-          expect(result.data.memberName).toBe("Abebe Bikila");
+          expect(result.data.memberName).toBe(allRes.data[0].memberName);
         }
       }
     });
