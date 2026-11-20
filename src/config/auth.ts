@@ -5,6 +5,7 @@ import { phoneNumber, bearer } from "better-auth/plugins";
 import * as schema from "../db/schema.ts";
 import { betterAuthSecret, betterAuthUrl } from "./env.ts";
 
+export const expiresIn = 60 * 60 * 24 * 30;
 export const auth = betterAuth({
   basePath: "/api/v1/auth",
   database: drizzleAdapter(connection, {
@@ -17,23 +18,21 @@ export const auth = betterAuth({
       image: "photoUrl",
     },
     additionalFields: {
-      role: {
-        type: "string",
-        defaultValue: "member",
-      },
-      gymId: {
-        type: "string",
-        required: true,
-      },
       status: {
         type: "string",
         defaultValue: "active",
       },
-      isDeleted: {
-        type: "boolean",
-        defaultValue: false,
+    },
+  },
+  session: {
+    additionalFields: {
+      activeGymId: {
+        type: "string",
+        required: false,
       },
     },
+    expiresIn: expiresIn,
+    updateAge: 60 * 60 * 24 * 1,
   },
   advanced: {
     database: {
@@ -48,10 +47,6 @@ export const auth = betterAuth({
       },
     }),
   ],
-  session: {
-    expiresIn: 60 * 60 * 24 * 30,
-    updateAge: 60 * 60 * 24 * 1,
-  },
   secret: betterAuthSecret,
   baseURL: betterAuthUrl,
 });
