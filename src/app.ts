@@ -8,6 +8,7 @@ import membershipRoute from "./routes/membership.route.ts";
 import enrollmentRoute from "./routes/enrollment.route.ts";
 import searchRoute from "./routes/search.route.ts";
 import { failure } from "./utils/response.ts";
+import authRoutes from "./routes/auth.routes.ts";
 
 const app = new Hono();
 
@@ -16,6 +17,8 @@ app.use("*", logger());
 app.get("/health", (c) => {
   return c.json({ ok: true, uptime: process.uptime() });
 });
+
+app.route("/api/v1/auth", authRoutes);
 
 app.all("/api/v1/auth/*", (c) => {
   return auth.handler(c.req.raw);

@@ -12,7 +12,7 @@
 - **Database & ORM**: PostgreSQL + Drizzle ORM (`^0.45.2`) + `postgres` driver (`^3.4.9`)
 - **Auth**: Better Auth (`^1.7.3`) with `@better-auth/drizzle-adapter` & `phoneNumber` / `bearer` plugins
 - **Validation**: Zod (`^4.5.4`)
-- **Test Command**: `OTP_HMAC_SECRET=test-otp-secret bun test --parallel=1` (Strictly run sequentially across test files to prevent concurrent table truncation collisions; 426 passing tests across 26 files)
+- **Test Command**: `OTP_HMAC_SECRET=test-otp-secret bun test --parallel=1` (Strictly run sequentially across test files to prevent concurrent table truncation collisions; 452 passing tests across 27 files)
 
 ---
 
@@ -238,6 +238,17 @@ Run with: `bun test --maxConcurrency=1`
    - **`verifyOtp` Real DB Flow**: Input validation (400), uniform 401 UNAUTHORIZED anti-enumeration responses (user missing, badge missing/suspended/deleted, user inactive/banned, OTP missing/expired, wrong code), attempt counting and atomic burn on 5th failure, client metadata persistence, and transactional `users.phoneNumberVerified = true` mutation upon success.
    - **Concurrency & Row-Level Locking**: Verified concurrent requests under pessimistic `.for("update")` locking serialize cleanly and burn OTP upon limit exhaustion without deadlocks or race conditions.
    - **Better Auth Bearer Token Session Integration**: End-to-end integration with `auth.api.getSession`, confirming tokens issued by `verifyOtp` authenticate active staff, resolve `userId`, `activeGymId`, and user verification status via both `Headers` instances and plain object headers, and reject expired or deleted sessions.
+
+18. **Auth HTTP Transport Layer & End-to-End API Suite (`src/controllers/auth.controller.ts`, `src/routes/auth.routes.ts`, `src/tests/e2e/auth.api.test.ts`)**:
+   - **Router Precedence**: `app.route("/api/v1/auth", authRoutes)` mounted before `app.all("/api/v1/auth/*")` in `src/app.ts` so custom OTP endpoints (`/api/v1/auth/otp/send`, `/api/v1/auth/otp/verify`) intercept requests before falling back to Better Auth's handler.
+   - **Client IP & User-Agent Extraction**: `getClientIp(c.req.raw.headers)` extracts true client IP via `cf-connecting-ip` / `x-forwarded-for` priority; `user-agent` header recorded in `sessions.userAgent`.
+   - **In-Memory Rate Limiting Guard**: `checkOtpRateLimit` executed in the controller before invoking domain services, dropping cooldown or window violations with HTTP 429 in < 0.1ms without database roundtrips.
+   - **Full E2E API Verification (26 Tests)**:
+     - Input validation (HTTP 400 on missing or invalid UUID gymId, missing/invalid phone formats, invalid OTP code length).
+     - Anti-enumeration testing across all send and verify failure branches.
+     - Sliding-window rate limit triggers (HTTP 429 `OTP_COOLDOWN_ACTIVE` on immediate repeat calls; HTTP 429 `TOO_MANY_REQUESTS_IP` upon exceeding 60 requests).
+     - SMS gateway 502 failure and verification cleanup.
+     - Full login lifecycle handoff: `sendOtp` -> `verifyOtp` -> use returned Bearer token on `GET /api/v1/staff` (200 OK for owner) and `GET /api/v1/members` (200 OK for staff), confirming RBAC enforcement (`403 FORBIDDEN` when non-owner staff attempts `/api/v1/staff`) and multi-tenant gym isolation.
 
 ---
 
