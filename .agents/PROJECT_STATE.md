@@ -252,14 +252,29 @@ Run with: `bun test --maxConcurrency=1`
 
 ---
 
-## 8. Multi-Tenant Roadmap (Phase 2 Target)
-1. **Tenant Schema Isolation**:
-   - Introduce `tenants` table (`id`, `name`, `slug`, `status`).
-   - Add `tenantId: uuid("tenant_id")` to `users`, `membershipPlans`, `memberships`, `payments`, etc.
-   - Replace global unique constraints with composite unique constraints: `(tenantId, phoneNumber)`.
-2. **Phone OTP Auth Integration**:
-   - Implement Better Auth Phone OTP sign-in endpoint for tablet staff logins.
-3. **Memberships & Subscriptions Module**:
-   - Active, Expired, Frozen, and Cancelled state machine logic.
-4. **Payments & Ledger**:
-   - Transactional enrollment: atomic creation of `membership` + `payment` in `db.transaction()`.
+## 8. Backlog & Planned Architectural Refinements (from Superpowers Review)
+1. **SMS Quota Protection**: Add `users.status === "active"` check in `sendOtp` before dispatching SMS to prevent banned/inactive accounts from draining SMS gateway credits.
+2. **Tenant Gym Active Validation**: Join `gyms` in both `sendOtp` and `verifyOtp` to assert `!gyms.isDeleted && gyms.status === "active"`, preventing session issuance for soft-deleted or deactivated gyms.
+3. **Verify IP-Flood Protection**: Add in-memory sliding-window IP rate limiting on `verifyOtp` at the controller layer to guard PostgreSQL connection pools and `.for("update")` row locks from distributed DoS attempts.
+4. **Env Fail-Fast Guard**: Throw explicit startup error in `src/config/env.ts` when `OTP_HMAC_SECRET` is missing in non-test environments.
+5. **Single-Query Join Optimization**: Collapse sequential `SELECT users` -> `SELECT gymStaff` queries in `sendOtp` and `verifyOtp` into a single SQL `INNER JOIN` (`users` + `gymStaff` + `gyms`), halving network latency and eliminating subtle timing discrepancies.
+6. **Atomic PostgreSQL Upsert**: Replace `tx.delete(verifications)` + `tx.insert(verifications)` in `sendOtp` with Drizzle's `.insert().onConflictDoUpdate()` on `verifications.identifier`.
+7. **Dynamic SMS White-Label Branding**: Inject the specific gym's name (`gym.name`) into the SMS template rather than the hardcoded `"GYM_Scale"` placeholder.
+
+---
+
+## 9. Multi-Tenant Roadmap (Phase 2 Target)
+1. **Tenant Schema Isolation**: ✅ **100% COMPLETE** (`gyms`, `gymStaff` badges, `members` CRM, composite unique constraints).
+2. **Phone OTP Auth & Session Lifecycle**: ✅ **100% COMPLETE** (HMAC-SHA256, sliding-window rate limits, AfroMessage REST client, Better Auth Bearer token handoff, 73 integration/E2E tests).
+3. **Multi-Branch Gym Switching (`POST /api/v1/auth/switch-gym`)**:
+   - Allow multi-facility staff/owners with badges at multiple gyms to switch `sessions.activeGymId` in-place without needing to re-authenticate via SMS.
+4. **Memberships & Subscriptions Module**:
+   - State machine transitions: Active, Expired, Frozen, and Cancelled.
+   - Subscription renewal stacking with pessimistic locking.
+5. **Transactional Enrollment & Payments Ledger**:
+   - Atomic creation of `member` + `membership` + `payment` in `connection.transaction()`.
+   - Payment method recording (Telebirr, CBE Birr, Cash) with transaction reference codes.
+   - Daily/monthly gym revenue reporting.
+6. **Front-Desk Check-In & Attendance**:
+   - Quick member check-in by phone or ID with real-time membership validity check.
+   - Offline sync support.
