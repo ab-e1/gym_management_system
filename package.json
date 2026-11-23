@@ -4,7 +4,8 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "bun check"
   },
   "type": "module",
   "devDependencies": {
