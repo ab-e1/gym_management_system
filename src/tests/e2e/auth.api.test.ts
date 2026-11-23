@@ -1,4 +1,12 @@
-import { test, describe, expect, beforeAll, afterAll, beforeEach, spyOn } from "bun:test";
+import {
+  test,
+  describe,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  spyOn,
+} from "bun:test";
 import app from "../../app.ts";
 import { connection } from "../../config/connection.ts";
 import {
@@ -13,6 +21,11 @@ import * as smsModule from "../../utils/sms.ts";
 import * as otp from "../../utils/otp.ts";
 import { resetOtpRateLimitStore } from "../../utils/otpRatelimit.ts";
 import { eq } from "drizzle-orm";
+import type { TestResponse } from "../../utils/response.ts";
+
+const getJson = async <T = any>(res: Response): Promise<TestResponse<T>> => {
+  return (await res.json()) as TestResponse<T>;
+};
 
 describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
   // Test Gym 1
@@ -54,7 +67,6 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
   const deletedStaffPhone = "+251955667788";
 
   // User with No Staff Badge
-  let userWithoutBadgeId: string;
   const userWithoutBadgePhone = "+251966778899";
 
   let smsSpy: ReturnType<typeof spyOn>;
@@ -230,15 +242,13 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
     });
 
     // 9. Seed User with No Staff Badge
-    const [noBadgeUser] = await connection
+    await connection
       .insert(users)
       .values({
         name: "Random Member User",
         phoneNumber: userWithoutBadgePhone,
         status: "active",
-      })
-      .returning();
-    userWithoutBadgeId = noBadgeUser.id;
+      });
 
     // 10. Seed Sample Members at Gym 1 & Gym 2 for RBAC/isolation tests
     await connection.insert(members).values({
@@ -287,7 +297,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
@@ -303,7 +313,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
@@ -316,7 +326,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
@@ -332,7 +342,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         });
 
         expect(res.status).toBe(400);
-        const body = await res.json();
+        const body = await getJson(res);
         expect(body.ok).toBe(false);
         expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
       }
@@ -352,7 +362,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.message).toContain("OTP code has been sent");
 
@@ -382,7 +392,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(smsSpy).toHaveBeenCalledTimes(1);
 
@@ -408,7 +418,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.message).toContain("OTP code has been sent");
 
@@ -434,7 +444,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(smsSpy).toHaveBeenCalledTimes(0);
 
@@ -514,7 +524,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res2.status).toBe(429);
-      const body2 = await res2.json();
+      const body2 = await getJson(res2);
       expect(body2.ok).toBe(false);
       expect(body2.error.code).toBe("OTP_COOLDOWN_ACTIVE");
       expect(body2.error.retryAfter).toBeGreaterThan(0);
@@ -554,7 +564,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res61.status).toBe(429);
-      const body = await res61.json();
+      const body = await getJson(res61);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("TOO_MANY_REQUESTS_IP");
     });
@@ -578,7 +588,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(502);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("GATEWAY_ERROR");
 
@@ -606,7 +616,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
@@ -641,7 +651,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UNAUTHORIZED");
       expect(body.error.message).toBe("Invalid or expired verification code");
@@ -659,7 +669,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UNAUTHORIZED");
     });
@@ -676,7 +686,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UNAUTHORIZED");
     });
@@ -694,7 +704,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         });
 
         expect(res.status).toBe(401);
-        const body = await res.json();
+        const body = await getJson(res);
         expect(body.ok).toBe(false);
         expect(body.error.code).toBe("UNAUTHORIZED");
       }
@@ -712,7 +722,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UNAUTHORIZED");
     });
@@ -736,7 +746,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UNAUTHORIZED");
     });
@@ -830,7 +840,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.token).toBeDefined();
       expect(body.data.token.length).toBe(64);
@@ -904,7 +914,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(verifyRes.status).toBe(200);
-      const verifyBody = await verifyRes.json();
+      const verifyBody = await getJson(verifyRes);
       const ownerBearerToken = verifyBody.data.token;
       expect(ownerBearerToken).toBeDefined();
 
@@ -917,7 +927,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(protectedRes.status).toBe(200);
-      const staffListBody = await protectedRes.json();
+      const staffListBody = await getJson(protectedRes);
       expect(staffListBody.ok).toBe(true);
       expect(Array.isArray(staffListBody.data)).toBe(true);
 
@@ -966,7 +976,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         }),
       });
       expect(verifyRes.status).toBe(200);
-      const staffToken = (await verifyRes.json()).data.token;
+      const staffToken = (await getJson(verifyRes)).data.token;
 
       // 3. Staff CAN access /api/v1/members (requires "owner" | "staff")
       const membersRes = await app.request("/api/v1/members", {
@@ -974,7 +984,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(membersRes.status).toBe(200);
-      const membersBody = await membersRes.json();
+      const membersBody = await getJson(membersRes);
       expect(membersBody.ok).toBe(true);
 
       // 4. Staff CANNOT access /api/v1/staff (strictly requires "owner") -> 403 FORBIDDEN
@@ -983,7 +993,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(staffRes.status).toBe(403);
-      const staffForbiddenBody = await staffRes.json();
+      const staffForbiddenBody = await getJson(staffRes);
       expect(staffForbiddenBody.ok).toBe(false);
       expect(staffForbiddenBody.error.code).toBe("FORBIDDEN");
     });
@@ -1009,7 +1019,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(verifyRes.status).toBe(200);
-      const { data } = await verifyRes.json();
+      const { data } = await getJson(verifyRes);
       const token = data.token;
 
       // 2. Fetch members list via Gym 1 session
@@ -1019,7 +1029,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
 
       // All returned members must belong to Gym 1, none from Gym 2

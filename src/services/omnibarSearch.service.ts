@@ -1,7 +1,10 @@
 import { and, asc, desc, eq, inArray, like, ilike, or } from "drizzle-orm";
 import { connection } from "../config/connection.ts";
 import { membershipPlans, memberships, members } from "../db/schema.ts";
-import { escapeSqlLikePattern, normalizePhoneNumber } from "../utils/helpers.ts";
+import {
+  escapeSqlLikePattern,
+  normalizePhoneNumber,
+} from "../utils/helpers.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export type OmnibarMemberSummary = {
@@ -88,11 +91,7 @@ export type CandidateMemberCard = {
   phoneNumber: string;
   photoUrl: string | null;
   state:
-    | "ACTIVE"
-    | "EXPIRED"
-    | "NO_MEMBERSHIP"
-    | "BANNED_OR_SUSPENDED"
-    | "ARCHIVED";
+    "ACTIVE" | "EXPIRED" | "NO_MEMBERSHIP" | "BANNED_OR_SUSPENDED" | "ARCHIVED";
   planName: string | null;
   daysRemaining?: number;
   daysExpired?: number;
@@ -107,11 +106,26 @@ export type NameSearchResult = {
 
 export type OmnibarSearchResult = PhoneSearchResult | NameSearchResult;
 
+export type OmnibarSearchServiceResult =
+  | {
+      ok: true;
+      data: OmnibarSearchResult;
+      status: ContentfulStatusCode;
+    }
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+      };
+      status: ContentfulStatusCode;
+    };
+
 export const omnibarSearch = async (
   gymId: string,
   query: string,
   limit: number = 5,
-) => {
+): Promise<OmnibarSearchServiceResult> => {
   const trimmed = query.trim();
   const cleanedDigits = trimmed.replace(/[\s-]/g, "");
 

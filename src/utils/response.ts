@@ -1,6 +1,40 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
+export type ApiSuccess<T> = {
+  ok: true;
+  data: T;
+  pagination?: Record<string, unknown>;
+  message?: string;
+};
+
+export type ApiFailure = {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    description?: string;
+    details?: Record<string, unknown>;
+    retryAfter?: number;
+  };
+};
+
+export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+export type TestResponse<T = any> = {
+  ok: boolean;
+  data: T;
+  error: {
+    code: string;
+    message: string;
+    description?: string;
+    details?: Record<string, unknown>;
+    retryAfter?: number;
+  };
+  message?: string;
+  pagination?: Record<string, unknown>;
+};
+
 export const success = <T>(
   c: Context,
   data: T,

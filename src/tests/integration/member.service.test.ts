@@ -1,6 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { connection } from "../../config/connection.ts";
-import { eq } from "drizzle-orm";
 import * as userService from "../../services/users/member.service.ts";
 import {
   gyms,
@@ -8,7 +7,6 @@ import {
   memberships,
   payments,
   membershipPlans,
-  sessions,
 } from "../../db/schema.ts";
 
 describe("integration test for member services", () => {
@@ -130,7 +128,7 @@ describe("integration test for member services", () => {
   });
 
   test("creating member should fail with 403 FORBIDDEN if the soft-deleted user was banned", async () => {
-    const [bannedArchived] = await connection
+    await connection
       .insert(members)
       .values({
         gymId: primaryGymId,
@@ -372,7 +370,7 @@ describe("integration test for member services", () => {
 
   test("updating member should fail with 409 CONFLICT if updated email belongs to another user", async () => {
     // 1. Seed two distinct members
-    const [memberA] = await connection
+    await connection
       .insert(members)
       .values({
         gymId: primaryGymId,

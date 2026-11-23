@@ -1,12 +1,26 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach, spyOn } from "bun:test";
+import {
+  describe,
+  test,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  spyOn,
+} from "bun:test";
 import { connection } from "../../config/connection.ts";
-import { users, gymStaff, gyms, verifications, sessions } from "../../db/schema.ts";
+import {
+  users,
+  gymStaff,
+  gyms,
+  verifications,
+  sessions,
+} from "../../db/schema.ts";
 import { sendOtp, verifyOtp } from "../../services/auth/login.service.ts";
 import { insertSession } from "../../services/auth/session.service.ts";
 import { auth } from "../../config/auth.ts";
 import * as smsModule from "../../utils/sms.ts";
 import * as otp from "../../utils/otp.ts";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 describe("Auth & Session Service Real Database Integration Suite", () => {
   // Test fixtures
@@ -14,7 +28,6 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
   let gym2Id: string;
   let activeUserId: string;
   let activeUserPhone = "+251911223344";
-  let activeStaffBadgeId: string;
 
   let inactiveUserId: string;
   let inactiveUserPhone = "+251922334455";
@@ -22,7 +35,6 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
   let bannedUserId: string;
   let bannedUserPhone = "+251933445566";
 
-  let userWithoutBadgeId: string;
   let userWithoutBadgePhone = "+251944556677";
 
   let suspendedStaffUserId: string;
@@ -78,7 +90,7 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       .returning();
     activeUserId = activeUser.id;
 
-    const [staffBadge] = await connection
+    await connection
       .insert(gymStaff)
       .values({
         gymId,
@@ -86,9 +98,7 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
         role: "coach",
         status: "active",
         isDeleted: false,
-      })
-      .returning();
-    activeStaffBadgeId = staffBadge.id;
+      });
 
     // 3. Seed inactive user
     const [inactiveUser] = await connection
@@ -129,15 +139,13 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
     });
 
     // 5. Seed user without gym staff badge
-    const [orphanUser] = await connection
+    await connection
       .insert(users)
       .values({
         name: "Orphan User",
         phoneNumber: userWithoutBadgePhone,
         status: "active",
-      })
-      .returning();
-    userWithoutBadgeId = orphanUser.id;
+      });
 
     // 6. Seed user with suspended gym badge
     const [suspUser] = await connection
@@ -245,8 +253,12 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       const expectedTtlMs = 60 * 60 * 24 * 30 * 1000; // 30 days
       const sessionExpiryMs = new Date(session.expiresAt).getTime();
 
-      expect(sessionExpiryMs).toBeGreaterThanOrEqual(beforeNow + expectedTtlMs - 2000);
-      expect(sessionExpiryMs).toBeLessThanOrEqual(afterNow + expectedTtlMs + 2000);
+      expect(sessionExpiryMs).toBeGreaterThanOrEqual(
+        beforeNow + expectedTtlMs - 2000,
+      );
+      expect(sessionExpiryMs).toBeLessThanOrEqual(
+        afterNow + expectedTtlMs + 2000,
+      );
     });
 
     test("should store optional ipAddress and userAgent client metadata", async () => {
@@ -357,7 +369,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       expect(res3.ok).toBe(false);
       expect(res3.status).toBe(400);
       if (!res3.ok) {
-        expect(res3.error.message).toContain("phone is not of a supported format");
+        expect(res3.error.message).toContain(
+          "phone is not of a supported format",
+        );
       }
 
       expect(smsSpy).not.toHaveBeenCalled();
@@ -511,7 +525,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       expect(res.status).toBe(502);
       if (!res.ok) {
         expect(res.error.code).toBe("GATEWAY_ERROR");
-        expect(res.error.message).toBe("AfroMessage upstream gateway connection timeout");
+        expect(res.error.message).toBe(
+          "AfroMessage upstream gateway connection timeout",
+        );
       }
 
       // Crucial security invariant: No orphan OTP remains in PostgreSQL
@@ -564,7 +580,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       expect(r4.ok).toBe(false);
       expect(r4.status).toBe(400);
       if (!r4.ok) {
-        expect(r4.error.message).toContain("phone is not of a supported format");
+        expect(r4.error.message).toContain(
+          "phone is not of a supported format",
+        );
       }
     });
 
@@ -616,7 +634,12 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
         userAgent: "GymManagementTablet/2.4 (Android 14)",
       };
 
-      const res = await verifyOtp(gymId, validTestCode, activeUserPhone, clientInfo);
+      const res = await verifyOtp(
+        gymId,
+        validTestCode,
+        activeUserPhone,
+        clientInfo,
+      );
 
       expect(res.ok).toBe(true);
       if (res.ok) {
@@ -638,18 +661,26 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
         expect(res.status).toBe(401);
         if (!res.ok) {
           expect(res.error.code).toBe("UNAUTHORIZED");
-          expect(res.error.message).toBe("Invalid or expired verification code");
+          expect(res.error.message).toBe(
+            "Invalid or expired verification code",
+          );
         }
       });
 
       test("should return generic 401 UNAUTHORIZED when user exists but has no gymStaff badge", async () => {
-        const res = await verifyOtp(gymId, validTestCode, userWithoutBadgePhone);
+        const res = await verifyOtp(
+          gymId,
+          validTestCode,
+          userWithoutBadgePhone,
+        );
 
         expect(res.ok).toBe(false);
         expect(res.status).toBe(401);
         if (!res.ok) {
           expect(res.error.code).toBe("UNAUTHORIZED");
-          expect(res.error.message).toBe("Invalid or expired verification code");
+          expect(res.error.message).toBe(
+            "Invalid or expired verification code",
+          );
         }
       });
 
@@ -660,7 +691,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
         expect(res.status).toBe(401);
         if (!res.ok) {
           expect(res.error.code).toBe("UNAUTHORIZED");
-          expect(res.error.message).toBe("Invalid or expired verification code");
+          expect(res.error.message).toBe(
+            "Invalid or expired verification code",
+          );
         }
       });
 
@@ -719,7 +752,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
         expect(res.status).toBe(401);
         if (!res.ok) {
           expect(res.error.code).toBe("UNAUTHORIZED");
-          expect(res.error.message).toBe("Invalid or expired verification code");
+          expect(res.error.message).toBe(
+            "Invalid or expired verification code",
+          );
         }
       });
     });
@@ -960,7 +995,8 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
 
     test("auth.api.getSession should reject invalid or expired tokens", async () => {
       // Fake non-existent token
-      const fakeToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+      const fakeToken =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
       const invalidRes = await auth.api.getSession({
         headers: new Headers({
           authorization: `Bearer ${fakeToken}`,
@@ -971,7 +1007,6 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
     });
 
     test("auth.api.getSession should return null when session is revoked/deleted from database", async () => {
-      const token = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
       const { session } = await insertSession({
         userId: activeUserId,
         gymId,

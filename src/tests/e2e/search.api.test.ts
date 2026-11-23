@@ -11,6 +11,11 @@ import {
   sessions,
   users,
 } from "../../db/schema.ts";
+import type { TestResponse } from "../../utils/response.ts";
+
+const getJson = async <T = any>(res: Response): Promise<TestResponse<T>> => {
+  return (await res.json()) as TestResponse<T>;
+};
 
 describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () => {
   let gym1Id: string;
@@ -24,9 +29,6 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
   let standardPlanId: string;
   let activeMemberId: string;
   let expiredMemberId: string;
-  let bannedMemberId: string;
-  let archivedMemberId: string;
-  let noSubMemberId: string;
 
   beforeAll(async () => {
     // Teardown before setup
@@ -247,41 +249,29 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
     });
 
     // 11. Seed Banned Member in Gym 1
-    const [bannedMember] = await connection
-      .insert(members)
-      .values({
-        gymId: gym1Id,
-        name: "Banned Member",
-        phoneNumber: "+251933445566",
-        status: "banned",
-      })
-      .returning();
-    bannedMemberId = bannedMember.id;
+    await connection.insert(members).values({
+      gymId: gym1Id,
+      name: "Banned Member",
+      phoneNumber: "+251933445566",
+      status: "banned",
+    });
 
     // 12. Seed Archived (Soft-deleted) Member in Gym 1
-    const [archivedMember] = await connection
-      .insert(members)
-      .values({
-        gymId: gym1Id,
-        name: "Archived Member",
-        phoneNumber: "+251944556677",
-        status: "active",
-        isDeleted: true,
-      })
-      .returning();
-    archivedMemberId = archivedMember.id;
+    await connection.insert(members).values({
+      gymId: gym1Id,
+      name: "Archived Member",
+      phoneNumber: "+251944556677",
+      status: "active",
+      isDeleted: true,
+    });
 
     // 13. Seed Lead / No-membership Member in Gym 1
-    const [noSubMember] = await connection
-      .insert(members)
-      .values({
-        gymId: gym1Id,
-        name: "Sara NoMembership",
-        phoneNumber: "+251933221100",
-        status: "active",
-      })
-      .returning();
-    noSubMemberId = noSubMember.id;
+    await connection.insert(members).values({
+      gymId: gym1Id,
+      name: "Sara NoMembership",
+      phoneNumber: "+251933221100",
+      status: "active",
+    });
   });
 
   afterAll(async () => {
@@ -299,7 +289,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
     test("should fail with 401 UNAUTHORIZED when no token is provided", async () => {
       const res = await app.request("/api/v1/search/omnibar?query=0911112233");
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("UN_AUTHORIZED");
     });
@@ -309,7 +299,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: "Bearer invalid-token-xyz" },
       });
       expect(res.status).toBe(401);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
     });
 
@@ -318,7 +308,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${suspendedStaffToken}` },
       });
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("FORBIDDEN");
     });
@@ -328,19 +318,25 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${noGymToken}` },
       });
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
     });
 
     test("should succeed with 200 OK when called by staff or owner", async () => {
-      const resStaff = await app.request("/api/v1/search/omnibar?query=0911112233", {
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const resStaff = await app.request(
+        "/api/v1/search/omnibar?query=0911112233",
+        {
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
       expect(resStaff.status).toBe(200);
 
-      const resOwner = await app.request("/api/v1/search/omnibar?query=0911112233", {
-        headers: { Authorization: `Bearer ${ownerToken}` },
-      });
+      const resOwner = await app.request(
+        "/api/v1/search/omnibar?query=0911112233",
+        {
+          headers: { Authorization: `Bearer ${ownerToken}` },
+        },
+      );
       expect(resOwner.status).toBe(200);
     });
   });
@@ -351,7 +347,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
@@ -361,20 +357,26 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(false);
       expect(body.error.code).toBe("INPUT_VALIDATION_ERROR");
     });
 
     test("should fail with 400 BAD_REQUEST when limit is out of bounds (< 1 or > 20)", async () => {
-      const resZero = await app.request("/api/v1/search/omnibar?query=0911&limit=0", {
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const resZero = await app.request(
+        "/api/v1/search/omnibar?query=0911&limit=0",
+        {
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
       expect(resZero.status).toBe(400);
 
-      const resHigh = await app.request("/api/v1/search/omnibar?query=0911&limit=50", {
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const resHigh = await app.request(
+        "/api/v1/search/omnibar?query=0911&limit=50",
+        {
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
       expect(resHigh.status).toBe(400);
     });
   });
@@ -385,7 +387,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("NOT_FOUND");
@@ -398,14 +400,20 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("ACTIVE");
       expect(body.data.member.name).toBe("Dawit Bekele");
       expect(body.data.activeMembership.planName).toBe("Monthly Gym & Cardio");
-      expect(body.data.activeMembership.daysRemaining).toBeGreaterThanOrEqual(14);
-      expect(body.data.availableActions).toEqual(["CHECK_IN", "RENEW_EARLY", "UPGRADE"]);
+      expect(body.data.activeMembership.daysRemaining).toBeGreaterThanOrEqual(
+        14,
+      );
+      expect(body.data.availableActions).toEqual([
+        "CHECK_IN",
+        "RENEW_EARLY",
+        "UPGRADE",
+      ]);
     });
 
     test("should return EXPIRED state with daysExpired and RENEW action for expired member", async () => {
@@ -413,7 +421,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("EXPIRED");
@@ -427,7 +435,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("BANNED_OR_SUSPENDED");
@@ -439,7 +447,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("ARCHIVED");
@@ -451,7 +459,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("NO_MEMBERSHIP");
@@ -465,13 +473,15 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
       expect(body.data.query).toBe("Dawit");
       expect(body.data.candidates.length).toBeGreaterThanOrEqual(1);
 
-      const dawit = body.data.candidates.find((c: any) => c.name === "Dawit Bekele");
+      const dawit = body.data.candidates.find(
+        (c: any) => c.name === "Dawit Bekele",
+      );
       expect(dawit).toBeDefined();
       expect(dawit.state).toBe("ACTIVE");
       expect(dawit.planName).toBe("Monthly Gym & Cardio");
@@ -482,10 +492,12 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
-      const dawit = body.data.candidates.find((c: any) => c.phoneNumber === "+251911112233");
+      const dawit = body.data.candidates.find(
+        (c: any) => c.phoneNumber === "+251911112233",
+      );
       expect(dawit).toBeDefined();
     });
 
@@ -494,18 +506,21 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
       expect(body.data.candidates.length).toBeLessThanOrEqual(2);
     });
 
     test("should return empty candidate list when no matches exist", async () => {
-      const res = await app.request("/api/v1/search/omnibar?query=NonExistentMemberXYZ", {
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const res = await app.request(
+        "/api/v1/search/omnibar?query=NonExistentMemberXYZ",
+        {
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
       expect(body.data.totalFound).toBe(0);
@@ -517,7 +532,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
       expect(body.data.candidates.length).toBe(0);
@@ -530,7 +545,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${staffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("ACTIVE");
@@ -544,7 +559,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${gym2StaffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("PHONE_MATCH");
       expect(body.data.state).toBe("NOT_FOUND");
@@ -555,7 +570,7 @@ describe("Search API E2E Tests (/api/v1/search & /api/v1/search/omnibar)", () =>
         headers: { Authorization: `Bearer ${gym2StaffToken}` },
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = await getJson(res);
       expect(body.ok).toBe(true);
       expect(body.data.type).toBe("NAME_MATCH");
       expect(body.data.candidates.length).toBe(0);

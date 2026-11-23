@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import * as otp from "../../utils/otp.ts";
+import type { SmsResult } from "../../utils/sms.ts";
 
 // Define mock data store and call trackers
 let mockUsers: Array<{ id: string; phoneNumber: string }> = [];
@@ -17,7 +18,7 @@ let mockVerifications: Array<{
   expiresAt: Date;
 }> = [];
 
-let sendSmsMock = mock(async (phone: string, message: string) => {
+let sendSmsMock = mock(async (phone: string, _message: string): Promise<SmsResult> => {
   return {
     ok: true as const,
     data: { messageId: "msg-123", to: phone },
@@ -27,8 +28,8 @@ let sendSmsMock = mock(async (phone: string, message: string) => {
 // Mock Drizzle connection
 const mockConnection = {
   select: (fields: any) => ({
-    from: (table: any) => ({
-      where: async (condition: any) => {
+    from: (_table: any) => ({
+      where: async (_condition: any) => {
         // Distinguish between users query and gymStaff query
         if (fields && fields.id && !fields.role) {
           // Users query: returns matching users
@@ -47,21 +48,21 @@ const mockConnection = {
       },
     }),
   }),
-  delete: (table: any) => ({
-    where: async (condition: any) => {
+  delete: (_table: any) => ({
+    where: async (_condition: any) => {
       mockVerifications = [];
       return [];
     },
   }),
   transaction: async (callback: (tx: any) => Promise<any>) => {
     const tx = {
-      delete: (table: any) => ({
-        where: async (condition: any) => {
+      delete: (_table: any) => ({
+        where: async (_condition: any) => {
           mockVerifications = [];
           return [];
         },
       }),
-      insert: (table: any) => ({
+      insert: (_table: any) => ({
         values: async (vals: any) => {
           mockVerifications.push(vals);
           return [vals];
@@ -93,7 +94,7 @@ describe("Auth Service - sendOtp Unit & Security Suite", () => {
     mockUsers = [];
     mockGymStaff = [];
     mockVerifications = [];
-    sendSmsMock = mock(async (phone: string, message: string) => {
+    sendSmsMock = mock(async (phone: string, _message: string): Promise<SmsResult> => {
       return {
         ok: true as const,
         data: { messageId: "msg-123", to: phone },
@@ -296,7 +297,7 @@ describe("Auth Service - sendOtp Unit & Security Suite", () => {
     });
 
     test("should return 502 Bad Gateway when SMS dispatch fails", async () => {
-      sendSmsMock = mock(async () => {
+      sendSmsMock = mock(async (_phone?: string, _message?: string): Promise<SmsResult> => {
         return {
           ok: false as const,
           error: {
@@ -312,7 +313,9 @@ describe("Auth Service - sendOtp Unit & Security Suite", () => {
       expect(res.status).toBe(502);
       if (!res.ok) {
         expect(res.error.code).toBe("GATEWAY_ERROR");
-        expect(res.error.message).toBe("AfroMessage upstream connection timeout");
+        expect(res.error.message).toBe(
+          "AfroMessage upstream connection timeout",
+        );
       }
       // Verify orphaned verification row was burned on SMS failure
       expect(mockVerifications.length).toBe(0);
