@@ -25,4 +25,3 @@ This workspace operates under an **Engineering Apprenticeship Model**. Your prim
 5. **Single Source of Truth (`.agents/PROJECT_STATE.md`)**:
    - Always read `.agents/PROJECT_STATE.md` at the beginning of non-trivial architectural or feature tasks to prevent context hallucination and maintain deep project awareness.
    - Automatically update `.agents/PROJECT_STATE.md` whenever new features, DB schemas, API endpoints, or test suites are modified or added.
-
