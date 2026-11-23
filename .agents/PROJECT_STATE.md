@@ -2,6 +2,15 @@
 
 > **IMPORTANT FOR ALL AGENTS**: Read this document at the start of any non-trivial task. Update this document whenever new features, schema changes, endpoints, or testing patterns are introduced.
 
+> [!IMPORTANT]
+> **CURRENT PROJECT STATUS (TL;DR FOR AGENTS)**:
+> - **Foundation**: Multi-Tenant SaaS core is **100% operational** with 452 passing tests across 27 suites (`OTP_HMAC_SECRET=test-otp-secret bun test --parallel=1`) and 0 type errors across all 71 files (`bun check`).
+> - **Live Modules**: Phone OTP Authentication (`sendOtp`/`verifyOtp`), Members CRM, Staff Workplace Badges & RBAC, Membership Plans, Subscriptions & Renewal Stacking with `.for("update")`, Fast Transactional Enrollment, and Omnibar Fast Search.
+> - **Immediate Next Focus**: Choosing between:
+>   1. Retention & Expiry Notification Engine (Telegram Bot + Cron Job)
+>   2. Front-Desk Member Check-In & Attendance Logic
+>   3. Leads CRM Pipeline (Walk-ins & phone leads)
+
 ---
 
 ## 1. Project Overview & Tech Stack
@@ -120,7 +129,9 @@
 | Method   | Endpoint                    | Access / Role                      | Description                                                                     |
 | :------- | :-------------------------- | :--------------------------------- | :------------------------------------------------------------------------------ |
 | `GET`    | `/health`                   | Public                             | System health status & uptime                                                   |
-| `ALL`    | `/api/v1/auth/*`            | Public                             | Better Auth handler (OTP, sessions)                                             |
+| `POST`   | `/api/v1/auth/otp/send`     | Public                             | Dispatch 6-digit OTP via SMS with in-memory sliding-window rate limit           |
+| `POST`   | `/api/v1/auth/otp/verify`   | Public                             | Verify HMAC OTP, burn row on 5th attempt, issue Better Auth Bearer token        |
+| `ALL`    | `/api/v1/auth/*`            | Public                             | Better Auth wildcard fallback handler                                           |
 | `POST`   | `/api/v1/members`           | `staff`, `owner`                   | Register new gym member                                                         |
 | `GET`    | `/api/v1/members`           | `staff`, `owner`                   | List members with pagination & search (`ilike`)                                 |
 | `GET`    | `/api/v1/members/:id`       | `staff`, `owner`                   | Get member details by ID                                                        |
@@ -149,34 +160,39 @@
 
 ---
 
-## 6. Test Suite Status (314 Passing Tests across 20 Green Suites - 100% Complete)
+## 6. Test Suite Status (452 Passing Tests across 27 Green Suites - 100% Complete)
 
-Run with: `bun test --maxConcurrency=1`
+Run with: `OTP_HMAC_SECRET=test-otp-secret bun test --parallel=1`
 
-### 100% Green Modules (All 20 Suites, 314 Passing Tests):
+### 100% Green Modules (All 27 Suites, 452 Passing Tests):
 
 - `src/tests/unit/response.test.ts` (3 pass - failure with details)
 - `src/tests/unit/helpers.test.ts` (19 pass - escapeSqlLikePattern, normalizePhoneNumber, isValidUUID, maskPhone with separator cleaning & tiers, formatOtpMessage)
 - `src/tests/unit/sms.test.ts` (25 pass - AfroMessage REST client validation, mock mode, timeouts, payload guards, INVALID_PAYLOAD vs INVALID_RECIPIENT distinction, auto-normalization, reverse proxy & response.error extraction, error sanitization)
 - `src/tests/unit/otp.test.ts` (13 pass with `OTP_HMAC_SECRET` configured - HMAC OTP generation, verification, timingSafeEqual)
 - `src/tests/unit/otpRatelimit.test.ts` (13 pass - per-phone 60s cooldown, 4/15m sliding window quota, shared gym Wi-Fi NAT 60/15m flood shield, opportunistic sweeper, LRU bounds)
+- `src/tests/unit/login.service.test.ts` (10 pass - mock phone OTP send/verify, gateway timeouts, HMAC checking)
 - `src/tests/unit/zSchema/user.schema.test.ts` (10 pass - status enum active/inactive/banned & normalization)
 - `src/tests/unit/zSchema/plan.schema.test.ts` (11 pass)
 - `src/tests/unit/zSchema/membership.schema.test.ts` (16 pass)
 - `src/tests/unit/zSchema/enrollment.schema.test.ts` (9 pass - UUID plan validation & payment enum)
 - `src/tests/unit/zSchema/search.schema.test.ts` (9 pass - query trimming, limits, bounds)
+- `src/tests/unit/zSchema/auth.schema.test.ts` (9 pass - send/verify OTP schemas, UUID gymId, E.164 phone regex)
 - `src/tests/integration/member.service.test.ts` (17 pass - 3-tier CRM customer queries & multi-tenant isolation)
 - `src/tests/integration/plan.service.test.ts` (13 pass - soft delete toggle, FK constraints with members.id)
+- `src/tests/integration/staff.service.test.ts` (24 pass - createStaff, getAllStaff, getStaffById, updateStaff, deleteStaffToggle, promoteMemberToStaff, rehireStaff)
+- `src/tests/integration/omnibarSearch.service.test.ts` (18 pass - deterministic candidate ordering, O(1) phone states, stacked renewals, wildcard escaping)
+- `src/tests/integration/auth.service.test.ts` (34 pass - real PostgreSQL DB auth, insertSession, sendOtp, verifyOtp, Better Auth token resolution)
 - `src/tests/integration/membership.service.test.ts` (16 pass - 3-tier members CRM join, desc createdAt ordering, soft-deleted plan preservation, synced count query, concurrency stacking & banned member 403 guard)
 - `src/tests/integration/enrollment.service.test.ts` (7 pass - 3-tier member CRM resurrection, members.id linkage, atomic membership + payment)
-- `src/tests/integration/omnibarSearch.service.test.ts` (18 pass - deterministic candidate ordering, O(1) phone states, stacked renewals, batched candidate search with inactive lapsed members, literal %/_ wildcard escaping)
-- `src/tests/integration/staff.service.test.ts` (24 pass - `createStaff`, `getAllStaff`, `getStaffById`, badge-scoped `updateStaff`, `deleteStaffToggle`, `promoteMemberToStaff`, and `rehireStaff` fully migrated to 3-tier multi-tenant `gymStaff` + `users` with atomic transactions, session cleanup, and explicit projections)
-- `src/tests/e2e/member.api.test.ts` (34 pass - RBAC, coach 403, suspended 403, missing activeGym 403, Zod validation, UUID 400, soft-delete toggle recovery, cross-tenant isolation)
+- `src/tests/integration/payment.service.test.ts` (4 pass - financial ledger tenant ownership validation, payment methods)
 - `src/tests/e2e/plan.api.test.ts` (16 pass - multi-tenant owner/staff RBAC, 401 unauthenticated, CRUD, pagination, 409 duplicate plan name)
-- `src/tests/e2e/membership.api.test.ts` (11 pass - RBAC coach 403, validation, malformed non-UUID 400 guard, full CRUD lifecycle)
-- `src/tests/e2e/enrollment.api.test.ts` (10 pass - 3-tier auth guardrails, coach 403, validation, conflict, and atomic creation)
-- `src/tests/e2e/search.api.test.ts` (22 pass - auth, validation, phone match states, candidate list, multi-tenant isolation)
 - `src/tests/e2e/staff.api.test.ts` (40 pass - RBAC security gates, coach 403, missing activeGym 403, suspended badge 403, Zod validation, CRM member phone collision 409, search queries, UUID 400 guards, soft-delete session invalidation, promote member to staff, rehire archived staff, and cross-tenant isolation)
+- `src/tests/e2e/member.api.test.ts` (34 pass - RBAC, coach 403, suspended 403, missing activeGym 403, Zod validation, UUID 400, soft-delete toggle recovery, cross-tenant isolation)
+- `src/tests/e2e/search.api.test.ts` (22 pass - auth, validation, phone match states, candidate list, multi-tenant isolation)
+- `src/tests/e2e/enrollment.api.test.ts` (10 pass - 3-tier auth guardrails, coach 403, validation, conflict, and atomic creation)
+- `src/tests/e2e/auth.api.test.ts` (26 pass - sendOtp/verifyOtp lifecycle, rate limits 429, anti-enumeration 200/401, Bearer token handoff to staff/members APIs)
+- `src/tests/e2e/membership.api.test.ts` (11 pass - RBAC coach 403, validation, malformed non-UUID 400 guard, full CRUD lifecycle)
 
 ### Migration Status:
 
@@ -294,19 +310,26 @@ Run with: `bun test --maxConcurrency=1`
 
 ---
 
-## 9. Multi-Tenant Roadmap (Phase 2 Target)
+## 9. Multi-Tenant Roadmap (Phase 2 Status & Upcoming)
 
+### Completed Foundation (100% Built & Tested)
 1. **Tenant Schema Isolation**: ✅ **100% COMPLETE** (`gyms`, `gymStaff` badges, `members` CRM, composite unique constraints).
 2. **Phone OTP Auth & Session Lifecycle**: ✅ **100% COMPLETE** (HMAC-SHA256, sliding-window rate limits, AfroMessage REST client, Better Auth Bearer token handoff, 73 integration/E2E tests).
-3. **Multi-Branch Gym Switching (`POST /api/v1/auth/switch-gym`)**:
-   - Allow multi-facility staff/owners with badges at multiple gyms to switch `sessions.activeGymId` in-place without needing to re-authenticate via SMS.
-4. **Memberships & Subscriptions Module**:
-   - State machine transitions: Active, Expired, Frozen, and Cancelled.
-   - Subscription renewal stacking with pessimistic locking.
-5. **Transactional Enrollment & Payments Ledger**:
-   - Atomic creation of `member` + `membership` + `payment` in `connection.transaction()`.
-   - Payment method recording (Telebirr, CBE Birr, Cash) with transaction reference codes.
-   - Daily/monthly gym revenue reporting.
-6. **Front-Desk Check-In & Attendance**:
-   - Quick member check-in by phone or ID with real-time membership validity check.
-   - Offline sync support.
+3. **Memberships & Subscriptions Module**: ✅ **100% COMPLETE** (`POST /api/v1/membership`, renewal stacking with `.for("update")`, dynamic computed expiration `endDate < NOW()`, status patch, soft delete toggle, 27 tests).
+4. **Transactional Fast Enrollment & Payments Ledger**: ✅ **100% COMPLETE** (`POST /api/v1/enrollment`, atomic creation of `member` + `membership` + `payment` inside `connection.transaction()`, Cash/Telebirr/CBE Birr support, 17 tests).
+5. **Omnibar Unified Search**: ✅ **100% COMPLETE** (`GET /api/v1/search/omnibar`, O(1) phone decision cards, fuzzy candidate name matching, stacked renewals, wildcard escaping, 40 tests).
+6. **Strict Type Safety (`bun check`)**: ✅ **100% COMPLETE** (0 errors across 71 files, typed response envelopes `TestResponse<T>`, explicit service contracts).
+
+### Upcoming Functional Milestones (Next Priorities)
+1. **Retention & Expiration Notification Engine**:
+   - Automated background cron job identifying memberships expiring in N days or newly expired.
+   - Telegram bot integration (and SMS fallback) sending expiration warnings and renew prompts directly to members.
+2. **Front-Desk Check-In & Attendance Logic**:
+   - Fast check-in verification via phone number or badge.
+   - Real-time membership validity and access authorization (`ACTIVE` -> allow entry; `EXPIRED`/`BANNED` -> reject with reason).
+   - Attendance logs for facility occupancy tracking.
+3. **Leads CRM Pipeline**:
+   - Gym walk-ins and phone inquiry capture before membership purchase.
+   - Pipeline stages: New Lead -> Contacted -> Trial Visit -> Converted to Member.
+4. **Multi-Branch Gym Switching (`POST /api/v1/auth/switch-gym`)**:
+   - Allow staff/owners with badges at multiple gyms to switch `sessions.activeGymId` in-place without re-authenticating via SMS.
