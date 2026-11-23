@@ -2,9 +2,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { normalizePhoneNumber } from "./helpers.ts";
 
 export type OtpRateLimitError =
-  | "OTP_COOLDOWN_ACTIVE"
-  | "TOO_MANY_REQUESTS_PHONE"
-  | "TOO_MANY_REQUESTS_IP";
+  "OTP_COOLDOWN_ACTIVE" | "TOO_MANY_REQUESTS_PHONE" | "TOO_MANY_REQUESTS_IP";
 
 type RateLimitResponse =
   | {

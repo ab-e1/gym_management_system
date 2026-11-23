@@ -3,9 +3,9 @@ export const ETHIOPIAN_PHONE_REGEX = /^(?:\+251|251|0)?([97]\d{8})$/;
 /**
  * Normalizes an Ethiopian phone number to standardized E.164 format (+2519... or +2517...).
  * Accepts inputs with or without country code (+251/251), trunk prefix (0), hyphens, or spaces.
- * 
+ *
  * Returns undefined if the input is not a valid Ethiopian mobile phone number.
- * 
+ *
  * Examples:
  * - "0911223344"      -> "+251911223344"
  * - "251911223344"    -> "+251911223344"

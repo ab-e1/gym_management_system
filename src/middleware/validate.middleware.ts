@@ -26,4 +26,3 @@ export const validate = (
     await next();
   };
 };
-

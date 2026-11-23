@@ -9,7 +9,10 @@ export const enrollmentSchema = z.object({
     name: z.string().trim().min(1, "name cannot be empty"),
     phoneNumber: z
       .string()
-      .regex(ethiopianPhoneRegex, "phoneNumber must be a valid ethiopian number")
+      .regex(
+        ethiopianPhoneRegex,
+        "phoneNumber must be a valid ethiopian number",
+      )
       .transform(normalizePhoneNumber),
     email: z.string().email("invalid email address").optional(),
   }),

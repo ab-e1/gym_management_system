@@ -2,7 +2,10 @@ import { and, count, eq, ilike, or } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
 import { members } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { escapeSqlLikePattern, normalizePhoneNumber } from "../../utils/helpers.ts";
+import {
+  escapeSqlLikePattern,
+  normalizePhoneNumber,
+} from "../../utils/helpers.ts";
 
 export const createMember = async (
   gymId: string,
