@@ -10,6 +10,7 @@ src: init-sessions
 ---
 
 ## Decided
+
 - Reads currently reinterpret an active membership as expired once its end date passes, so the database and the API disagree. The agreed direction is a scheduled job writing the real status, with the read-time check only a stopgap until it lands.
 - In the code: Membership status is stored as 'active' | 'expired' | 'cancelled'. Do not add more read-time derivation of 'expired' from endDate; treat the stored column as the source of truth and put expiry transitions in the cron job.
 

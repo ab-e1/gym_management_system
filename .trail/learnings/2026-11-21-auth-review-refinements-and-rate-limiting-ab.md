@@ -16,6 +16,7 @@ touches:
 ---
 
 ## Decided
+
 - Superpowers code review scored the Phone OTP & Session lifecycle at 9.2/10, approving it for production.
 - Key refinements queued for upcoming polish:
   1. `sendOtp` must check `users.status === "active"` before dispatching SMS to eliminate credit waste on banned/inactive users.
@@ -24,4 +25,5 @@ touches:
   4. Database calls in `sendOtp` can be simplified to a single query via `onConflictDoUpdate` on `verifications.identifier`.
 
 ## Watch out
-- Do not remove `app.all("/api/v1/auth/*")`: Better Auth client libraries call `/api/v1/auth/sign-out` and `/api/v1/auth/get-session` via HTTP. Keeping custom routes mounted *before* `app.all` gives custom OTP logic precedence while preserving Better Auth's standard endpoints.
+
+- Do not remove `app.all("/api/v1/auth/*")`: Better Auth client libraries call `/api/v1/auth/sign-out` and `/api/v1/auth/get-session` via HTTP. Keeping custom routes mounted _before_ `app.all` gives custom OTP logic precedence while preserving Better Auth's standard endpoints.

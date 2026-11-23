@@ -2,9 +2,7 @@
   "mcpServers": {
     "trail": {
       "command": "trail",
-      "args": [
-        "mcp"
-      ]
+      "args": ["mcp"]
     }
   }
 }
