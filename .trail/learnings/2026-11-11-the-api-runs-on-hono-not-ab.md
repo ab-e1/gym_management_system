@@ -10,6 +10,7 @@ src: init-sessions
 ---
 
 ## Decided
+
 - The project's own guidance only banned Express, which left the HTTP layer ambiguous. The team settled on Hono as the idiomatic choice on Bun, so the question is closed rather than reopened every review.
 - In the code: Framework is Hono served by Bun. There is no Express anywhere and no Bun.serve() handler to move code into. When adding endpoints, extend the existing Hono router under the API app and keep the route -> middleware -> controller -> service split.
 
