@@ -110,7 +110,11 @@ describe("integration test for the enrollment service", async () => {
       `${staffId}`,
       `${planId}`,
       { name: "toloasadjb", phoneNumber: "+251943223344" },
-      { amount: 2500, paymentMethod: "telebirr", referenceCode: "FT2610A87B92" },
+      {
+        amount: 2500,
+        paymentMethod: "telebirr",
+        referenceCode: "FT2610A87B92",
+      },
     );
 
     expect(result.ok).toBe(true);
@@ -124,7 +128,9 @@ describe("integration test for the enrollment service", async () => {
       expect(endDateObj.getSeconds()).toBe(59);
       expect(result.data.newMembershipPayment.amount).toBe(2500);
       expect(result.data.newMembershipPayment.paymentMethod).toBe("telebirr");
-      expect(result.data.newMembershipPayment.referenceCode).toBe("FT2610A87B92");
+      expect(result.data.newMembershipPayment.referenceCode).toBe(
+        "FT2610A87B92",
+      );
       expect(result.data.newMembershipPayment.recordedBy).toBe(staffId);
     }
   });
@@ -201,14 +207,12 @@ describe("integration test for the enrollment service", async () => {
   });
 
   test("test should fail with 403 FORBIDDEN if the member attempting enrollment is banned", async () => {
-    await connection
-      .insert(members)
-      .values({
-        gymId,
-        name: "Banned Member Trying Enrollment",
-        phoneNumber: "+251988776655",
-        status: "banned",
-      });
+    await connection.insert(members).values({
+      gymId,
+      name: "Banned Member Trying Enrollment",
+      phoneNumber: "+251988776655",
+      status: "banned",
+    });
 
     const result = await enrollment(
       gymId,
@@ -230,16 +234,14 @@ describe("integration test for the enrollment service", async () => {
 
   test("test should fail with 409 CONFLICT if resurrecting soft-deleted member with email used by another user", async () => {
     // Insert a soft deleted member
-    await connection
-      .insert(members)
-      .values({
-        gymId,
-        name: "Soft Deleted With Separate Email",
-        phoneNumber: "+251977112233",
-        email: "original.resurrect@gym.et",
-        isDeleted: true,
-        status: "inactive",
-      });
+    await connection.insert(members).values({
+      gymId,
+      name: "Soft Deleted With Separate Email",
+      phoneNumber: "+251977112233",
+      email: "original.resurrect@gym.et",
+      isDeleted: true,
+      status: "inactive",
+    });
 
     // Attempt resurrection with email "tolosa@email.com" (which already belongs to tolosa's first member)
     const result = await enrollment(
@@ -258,7 +260,9 @@ describe("integration test for the enrollment service", async () => {
     if (!result.ok) {
       expect(result.status).toBe(409);
       expect(result.error.code).toBe("CONFLICT");
-      expect(result.error.message).toBe("email is already in use by another person");
+      expect(result.error.message).toBe(
+        "email is already in use by another person",
+      );
     }
   });
 });

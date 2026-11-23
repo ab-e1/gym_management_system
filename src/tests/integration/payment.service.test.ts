@@ -143,7 +143,9 @@ describe("Payment Service Integration Tests (TDD)", () => {
     expect(res.status).toBe(404);
     if (!res.ok) {
       expect(res.error.code).toBe("NOT_FOUND");
-      expect(res.error.message).toContain("Membership not found in this gym context");
+      expect(res.error.message).toContain(
+        "Membership not found in this gym context",
+      );
     }
 
     // Verify no payment was created under Gym 2

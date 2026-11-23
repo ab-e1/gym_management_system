@@ -109,8 +109,12 @@ describe("membership service integration tests (TDD)", () => {
         expect(result.data.planId).toBe(planId);
         expect(result.data.status).toBe("active");
 
-        const expectedEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        expect(new Date(result.data.endDate).getDate()).toBe(expectedEndDate.getDate());
+        const expectedEndDate = new Date(
+          now.getTime() + 30 * 24 * 60 * 60 * 1000,
+        );
+        expect(new Date(result.data.endDate).getDate()).toBe(
+          expectedEndDate.getDate(),
+        );
 
         // Verify end-of-day normalization (23:59:59.999)
         const endDateObj = new Date(result.data.endDate);
@@ -185,26 +189,32 @@ describe("membership service integration tests (TDD)", () => {
     test("should stack renewal start date on top of active membership end date", async () => {
       // 1. Create initial active membership
       const now = new Date();
-      const initialMembershipResult = await membershipService.createMembership(gymId, {
-        userId: memberId,
-        planId: planId,
-        startDate: now,
-      });
+      const initialMembershipResult = await membershipService.createMembership(
+        gymId,
+        {
+          userId: memberId,
+          planId: planId,
+          startDate: now,
+        },
+      );
       expect(initialMembershipResult.ok).toBe(true);
 
       if (initialMembershipResult.ok) {
         const initialEndDate = new Date(initialMembershipResult.data.endDate);
 
         // 2. Renew membership while first one is still active
-        const renewalMembershipResult = await membershipService.createMembership(gymId, {
-          userId: memberId,
-          planId: planId,
-        });
+        const renewalMembershipResult =
+          await membershipService.createMembership(gymId, {
+            userId: memberId,
+            planId: planId,
+          });
 
         expect(renewalMembershipResult.ok).toBe(true);
         if (renewalMembershipResult.ok) {
           // New startDate should match first membership's endDate!
-          expect(new Date(renewalMembershipResult.data.startDate).getTime()).toBe(initialEndDate.getTime());
+          expect(
+            new Date(renewalMembershipResult.data.startDate).getTime(),
+          ).toBe(initialEndDate.getTime());
         }
       }
     });
@@ -273,12 +283,20 @@ describe("membership service integration tests (TDD)", () => {
     });
 
     test("should filter memberships by userId", async () => {
-      const result = await membershipService.getAllMemberships(gymId, 1, 10, undefined, memberId);
+      const result = await membershipService.getAllMemberships(
+        gymId,
+        1,
+        10,
+        undefined,
+        memberId,
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.status).toBe(200);
-        expect(result.data.every((membership) => membership.userId === memberId)).toBe(true);
+        expect(
+          result.data.every((membership) => membership.userId === memberId),
+        ).toBe(true);
       }
     });
 
@@ -300,7 +318,10 @@ describe("membership service integration tests (TDD)", () => {
         .returning();
 
       // 2. Fetch single membership by ID
-      const singleMembershipResult = await membershipService.getMembershipById(gymId, pastMembership.id);
+      const singleMembershipResult = await membershipService.getMembershipById(
+        gymId,
+        pastMembership.id,
+      );
       expect(singleMembershipResult.ok).toBe(true);
       if (singleMembershipResult.ok) {
         // Must dynamically return expired!
@@ -308,19 +329,29 @@ describe("membership service integration tests (TDD)", () => {
       }
 
       // 3. Fetch all memberships with statusFilter = "expired"
-      const expiredMembershipsResult = await membershipService.getAllMemberships(gymId, 1, 10, "expired");
+      const expiredMembershipsResult =
+        await membershipService.getAllMemberships(gymId, 1, 10, "expired");
       expect(expiredMembershipsResult.ok).toBe(true);
       if (expiredMembershipsResult.ok) {
-        const foundExpiredMembership = expiredMembershipsResult.data.find((membership) => membership.id === pastMembership.id);
+        const foundExpiredMembership = expiredMembershipsResult.data.find(
+          (membership) => membership.id === pastMembership.id,
+        );
         expect(foundExpiredMembership).toBeDefined();
         expect(foundExpiredMembership?.status).toBe("expired");
       }
 
       // 4. Fetch all memberships with statusFilter = "active"
-      const activeMembershipsResult = await membershipService.getAllMemberships(gymId, 1, 10, "active");
+      const activeMembershipsResult = await membershipService.getAllMemberships(
+        gymId,
+        1,
+        10,
+        "active",
+      );
       expect(activeMembershipsResult.ok).toBe(true);
       if (activeMembershipsResult.ok) {
-        const foundActiveMembership = activeMembershipsResult.data.find((membership) => membership.id === pastMembership.id);
+        const foundActiveMembership = activeMembershipsResult.data.find(
+          (membership) => membership.id === pastMembership.id,
+        );
         expect(foundActiveMembership).toBeUndefined(); // Must be excluded from active filter!
       }
     });
@@ -351,17 +382,26 @@ describe("membership service integration tests (TDD)", () => {
         .returning();
 
       // 3. getMembershipById should return 404 because user is soft-deleted!
-      const singleResult = await membershipService.getMembershipById(gymId, membershipForDeleted.id);
+      const singleResult = await membershipService.getMembershipById(
+        gymId,
+        membershipForDeleted.id,
+      );
       expect(singleResult.ok).toBe(false);
       if (!singleResult.ok) {
         expect(singleResult.status).toBe(404);
       }
 
       // 4. getAllMemberships should exclude membership of soft-deleted user!
-      const listResult = await membershipService.getAllMemberships(gymId, 1, 50);
+      const listResult = await membershipService.getAllMemberships(
+        gymId,
+        1,
+        50,
+      );
       expect(listResult.ok).toBe(true);
       if (listResult.ok) {
-        const found = listResult.data.find((m) => m.id === membershipForDeleted.id);
+        const found = listResult.data.find(
+          (m) => m.id === membershipForDeleted.id,
+        );
         expect(found).toBeUndefined();
       }
     });
@@ -398,7 +438,10 @@ describe("membership service integration tests (TDD)", () => {
         .where(eq(membershipPlans.id, promoPlan.id));
 
       // 4. getMembershipById should STILL succeed and preserve planName
-      const singleResult = await membershipService.getMembershipById(gymId, promoMembership.id);
+      const singleResult = await membershipService.getMembershipById(
+        gymId,
+        promoMembership.id,
+      );
       expect(singleResult.ok).toBe(true);
       if (singleResult.ok) {
         expect(singleResult.data.id).toBe(promoMembership.id);
@@ -407,7 +450,11 @@ describe("membership service integration tests (TDD)", () => {
       }
 
       // 5. getAllMemberships should also STILL include this membership
-      const listResult = await membershipService.getAllMemberships(gymId, 1, 50);
+      const listResult = await membershipService.getAllMemberships(
+        gymId,
+        1,
+        50,
+      );
       expect(listResult.ok).toBe(true);
       if (listResult.ok) {
         const found = listResult.data.find((m) => m.id === promoMembership.id);
@@ -424,7 +471,10 @@ describe("membership service integration tests (TDD)", () => {
 
       if (allRes.ok && allRes.data.length > 0) {
         const targetId = allRes.data[0].id;
-        const result = await membershipService.getMembershipById(gymId, targetId);
+        const result = await membershipService.getMembershipById(
+          gymId,
+          targetId,
+        );
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -435,7 +485,10 @@ describe("membership service integration tests (TDD)", () => {
     });
 
     test("should fail with 404 NOT_FOUND for non-existent ID", async () => {
-      const result = await membershipService.getMembershipById(gymId, "00000000-0000-0000-0000-000000000000");
+      const result = await membershipService.getMembershipById(
+        gymId,
+        "00000000-0000-0000-0000-000000000000",
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -449,7 +502,11 @@ describe("membership service integration tests (TDD)", () => {
       const allRes = await membershipService.getAllMemberships(gymId, 1, 1);
       if (allRes.ok && allRes.data.length > 0) {
         const targetId = allRes.data[0].id;
-        const result = await membershipService.updateMembershipStatus(gymId, targetId, "cancelled");
+        const result = await membershipService.updateMembershipStatus(
+          gymId,
+          targetId,
+          "cancelled",
+        );
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -462,7 +519,10 @@ describe("membership service integration tests (TDD)", () => {
       const allRes = await membershipService.getAllMemberships(gymId, 1, 1);
       if (allRes.ok && allRes.data.length > 0) {
         const targetId = allRes.data[0].id;
-        const result = await membershipService.deleteMembershipToggle(gymId, targetId);
+        const result = await membershipService.deleteMembershipToggle(
+          gymId,
+          targetId,
+        );
 
         expect(result.ok).toBe(true);
       }
