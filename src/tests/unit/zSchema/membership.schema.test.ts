@@ -46,7 +46,6 @@ describe("membership Zod schema unit tests", () => {
       expect(result.success).toBe(false);
     });
 
-
     test("should fail if userId is missing", () => {
       const result = createMembershipSchema.safeParse({
         planId: validPlanUUID,
@@ -60,7 +59,6 @@ describe("membership Zod schema unit tests", () => {
       });
       expect(result.success).toBe(false);
     });
-
   });
 
   describe("updateMembershipStatusSchema", () => {
@@ -136,7 +134,6 @@ describe("membership Zod schema unit tests", () => {
       });
       expect(result.success).toBe(true);
     });
-
 
     test("should fail if userId query is an invalid UUID", () => {
       const result = membershipQuerySchema.safeParse({

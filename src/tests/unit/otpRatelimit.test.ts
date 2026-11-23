@@ -132,7 +132,11 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
 
       // At T = 15m + 1s, Req 1 has expired (older than 15 minutes).
       // Only Req 2, 3, 4 remain in the window (count = 3 < 4).
-      const r5 = checkOtpRateLimit(defaultIp, phone, baseTime + 15 * 60_000 + 1000);
+      const r5 = checkOtpRateLimit(
+        defaultIp,
+        phone,
+        baseTime + 15 * 60_000 + 1000,
+      );
 
       expect(r5.ok).toBe(true);
     });
@@ -146,7 +150,11 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
       for (let i = 1; i <= 20; i++) {
         // e.g. +251911000001 through +251911000020
         const staffPhone = `+2519110000${i.toString().padStart(2, "0")}`;
-        const result = checkOtpRateLimit(gymSharedIp, staffPhone, baseTime + i * 1000);
+        const result = checkOtpRateLimit(
+          gymSharedIp,
+          staffPhone,
+          baseTime + i * 1000,
+        );
 
         expect(result.ok).toBe(true);
       }
@@ -185,11 +193,19 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
 
       // Exhaust attacker IP limit (60)
       for (let i = 1; i <= 60; i++) {
-        checkOtpRateLimit(attackerIp, `+2519130000${i.toString().padStart(2, "0")}`, baseTime + i * 10);
+        checkOtpRateLimit(
+          attackerIp,
+          `+2519130000${i.toString().padStart(2, "0")}`,
+          baseTime + i * 10,
+        );
       }
 
       // Legitimate user from different IP
-      const honestResult = checkOtpRateLimit(honestIp, "+251911223344", baseTime + 1000);
+      const honestResult = checkOtpRateLimit(
+        honestIp,
+        "+251911223344",
+        baseTime + 1000,
+      );
       expect(honestResult.ok).toBe(true);
     });
   });
@@ -203,7 +219,11 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
       expect(resA.ok).toBe(true);
 
       // Staff B requests OTP 5 seconds later on the same IP
-      const resB = checkOtpRateLimit(defaultIp, "+251922222222", baseTime + 5000);
+      const resB = checkOtpRateLimit(
+        defaultIp,
+        "+251922222222",
+        baseTime + 5000,
+      );
       expect(resB.ok).toBe(true);
     });
 
@@ -215,7 +235,11 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
       resetOtpRateLimitStore();
 
       // Immediately requesting again should succeed because store was reset
-      const res = checkOtpRateLimit(defaultIp, "+251911223344", baseTime + 1000);
+      const res = checkOtpRateLimit(
+        defaultIp,
+        "+251911223344",
+        baseTime + 1000,
+      );
       expect(res.ok).toBe(true);
     });
 
