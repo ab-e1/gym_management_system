@@ -305,7 +305,10 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
         },
         body: JSON.stringify({
           planId,
-          userData: { name: "Duplicate Phone Member", phoneNumber: "0933333333" },
+          userData: {
+            name: "Duplicate Phone Member",
+            phoneNumber: "0933333333",
+          },
           paymentData: { paymentMethod: "cash" },
         }),
       });
@@ -342,8 +345,12 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       const cashEnrollmentResult = (await response.json()) as any;
       expect(cashEnrollmentResult.ok).toBe(true);
       expect(cashEnrollmentResult.data.newMember).toBeDefined();
-      expect(cashEnrollmentResult.data.newMember.name).toBe("Dawit Walk-In Member");
-      expect(cashEnrollmentResult.data.newMember.phoneNumber).toBe("+251944444444");
+      expect(cashEnrollmentResult.data.newMember.name).toBe(
+        "Dawit Walk-In Member",
+      );
+      expect(cashEnrollmentResult.data.newMember.phoneNumber).toBe(
+        "+251944444444",
+      );
 
       expect(cashEnrollmentResult.data.newMembership).toBeDefined();
       expect(cashEnrollmentResult.data.newMembership.planId).toBe(planId);
@@ -351,8 +358,12 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
 
       expect(cashEnrollmentResult.data.newMembershipPayment).toBeDefined();
       expect(cashEnrollmentResult.data.newMembershipPayment.amount).toBe(2500); // Auto-filled from plan price!
-      expect(cashEnrollmentResult.data.newMembershipPayment.paymentMethod).toBe("cash");
-      expect(cashEnrollmentResult.data.newMembershipPayment.recordedBy).toBe(staffId);
+      expect(cashEnrollmentResult.data.newMembershipPayment.paymentMethod).toBe(
+        "cash",
+      );
+      expect(cashEnrollmentResult.data.newMembershipPayment.recordedBy).toBe(
+        staffId,
+      );
     });
 
     test("POST /api/v1/enrollment should succeed with digital payment (telebirr + referenceCode)", async () => {
@@ -379,10 +390,18 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       expect(response.status).toBe(201);
       const digitalEnrollmentResult = (await response.json()) as any;
       expect(digitalEnrollmentResult.ok).toBe(true);
-      expect(digitalEnrollmentResult.data.newMember.phoneNumber).toBe("+251955555555");
-      expect(digitalEnrollmentResult.data.newMembershipPayment.paymentMethod).toBe("telebirr");
-      expect(digitalEnrollmentResult.data.newMembershipPayment.referenceCode).toBe("FT2610A87B92");
-      expect(digitalEnrollmentResult.data.newMembershipPayment.recordedBy).toBe(ownerId);
+      expect(digitalEnrollmentResult.data.newMember.phoneNumber).toBe(
+        "+251955555555",
+      );
+      expect(
+        digitalEnrollmentResult.data.newMembershipPayment.paymentMethod,
+      ).toBe("telebirr");
+      expect(
+        digitalEnrollmentResult.data.newMembershipPayment.referenceCode,
+      ).toBe("FT2610A87B92");
+      expect(digitalEnrollmentResult.data.newMembershipPayment.recordedBy).toBe(
+        ownerId,
+      );
     });
   });
 });

@@ -265,10 +265,13 @@ describe("Membership API E2E Tests (/api/v1/membership)", () => {
     });
 
     test("GET /api/v1/membership/:id should return details for created membership (200 OK)", async () => {
-      const response = await app.request(`/api/v1/membership/${createdMembershipId}`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const response = await app.request(
+        `/api/v1/membership/${createdMembershipId}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
 
       expect(response.status).toBe(200);
       const result = (await response.json()) as any;
@@ -279,10 +282,13 @@ describe("Membership API E2E Tests (/api/v1/membership)", () => {
 
     test("GET /api/v1/membership/:id should return 404 NOT_FOUND for non-existent ID", async () => {
       const nonExistentId = "00000000-0000-0000-0000-000000000000";
-      const response = await app.request(`/api/v1/membership/${nonExistentId}`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const response = await app.request(
+        `/api/v1/membership/${nonExistentId}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
 
       expect(response.status).toBe(404);
       const result = (await response.json()) as any;
@@ -291,10 +297,13 @@ describe("Membership API E2E Tests (/api/v1/membership)", () => {
     });
 
     test("GET /api/v1/membership/:id should return 400 BAD_REQUEST for malformed non-UUID ID", async () => {
-      const response = await app.request(`/api/v1/membership/not-a-valid-uuid`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${staffToken}` },
-      });
+      const response = await app.request(
+        `/api/v1/membership/not-a-valid-uuid`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${staffToken}` },
+        },
+      );
 
       expect(response.status).toBe(400);
       const result = (await response.json()) as any;
@@ -303,14 +312,17 @@ describe("Membership API E2E Tests (/api/v1/membership)", () => {
     });
 
     test("PATCH /api/v1/membership/:id should update status to cancelled (200 OK)", async () => {
-      const response = await app.request(`/api/v1/membership/${createdMembershipId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${ownerToken}`,
+      const response = await app.request(
+        `/api/v1/membership/${createdMembershipId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${ownerToken}`,
+          },
+          body: JSON.stringify({ status: "cancelled" }),
         },
-        body: JSON.stringify({ status: "cancelled" }),
-      });
+      );
 
       expect(response.status).toBe(200);
       const result = (await response.json()) as any;
@@ -319,10 +331,13 @@ describe("Membership API E2E Tests (/api/v1/membership)", () => {
     });
 
     test("DELETE /api/v1/membership/:id should soft-delete membership (200 OK)", async () => {
-      const response = await app.request(`/api/v1/membership/${createdMembershipId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${ownerToken}` },
-      });
+      const response = await app.request(
+        `/api/v1/membership/${createdMembershipId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${ownerToken}` },
+        },
+      );
 
       expect(response.status).toBe(200);
       const result = (await response.json()) as any;

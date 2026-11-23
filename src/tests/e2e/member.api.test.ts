@@ -402,12 +402,15 @@ describe("Member API - End-to-End Test Suite", () => {
     });
 
     test("GET /api/v1/members/:id should fail with 400 BAD_REQUEST for malformed non-UUID id", async () => {
-      const res = await app.request(`/api/v1/members/invalid-uuid-syntax-test`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${staffToken}`,
+      const res = await app.request(
+        `/api/v1/members/invalid-uuid-syntax-test`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
         },
-      });
+      );
       const result = (await res.json()) as any;
       expect(res.status).toBe(400);
       expect(result.ok).toBe(false);
@@ -415,16 +418,19 @@ describe("Member API - End-to-End Test Suite", () => {
     });
 
     test("PATCH /api/v1/members/:id should fail with 400 BAD_REQUEST for malformed non-UUID id", async () => {
-      const res = await app.request(`/api/v1/members/invalid-uuid-syntax-test`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${staffToken}`,
+      const res = await app.request(
+        `/api/v1/members/invalid-uuid-syntax-test`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${staffToken}`,
+          },
+          body: JSON.stringify({
+            name: "update attempt",
+          }),
         },
-        body: JSON.stringify({
-          name: "update attempt",
-        }),
-      });
+      );
       const result = (await res.json()) as any;
       expect(res.status).toBe(400);
       expect(result.ok).toBe(false);
@@ -432,12 +438,15 @@ describe("Member API - End-to-End Test Suite", () => {
     });
 
     test("DELETE /api/v1/members/:id should fail with 400 BAD_REQUEST for malformed non-UUID id", async () => {
-      const res = await app.request(`/api/v1/members/invalid-uuid-syntax-test`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${staffToken}`,
+      const res = await app.request(
+        `/api/v1/members/invalid-uuid-syntax-test`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
         },
-      });
+      );
       const result = (await res.json()) as any;
       expect(res.status).toBe(400);
       expect(result.ok).toBe(false);
@@ -529,12 +538,15 @@ describe("Member API - End-to-End Test Suite", () => {
     });
 
     test("GET /api/v1/members?search=test member 2 should return filtered search results", async () => {
-      const res = await app.request("/api/v1/members?search=test%20member%202", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${staffToken}`,
+      const res = await app.request(
+        "/api/v1/members?search=test%20member%202",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
         },
-      });
+      );
       const result = (await res.json()) as any;
       expect(res.status).toBe(200);
       expect(result.ok).toBe(true);

@@ -622,7 +622,9 @@ describe("Staff API - End-to-End Test Suite", () => {
       const result = (await res.json()) as any;
       expect(res.status).toBe(200);
       expect(result.ok).toBe(true);
-      expect(result.data.message).toBe("Staff member soft-deleted successfully");
+      expect(result.data.message).toBe(
+        "Staff member soft-deleted successfully",
+      );
     });
 
     test("should recover soft-deleted staff on second toggle", async () => {
