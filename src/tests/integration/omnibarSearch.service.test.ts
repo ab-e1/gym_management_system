@@ -77,7 +77,10 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.status).toBe(200);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "NOT_FOUND"
+        ) {
           expect(searchResult.data.state).toBe("NOT_FOUND");
           expect(searchResult.data.searchedPhone).toBe("+251911000000");
           expect(searchResult.data.availableActions).toEqual(["ENROLL"]);
@@ -114,13 +117,24 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "ACTIVE") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "ACTIVE"
+        ) {
           expect(searchResult.data.state).toBe("ACTIVE");
           expect(searchResult.data.member.id).toBe(activeMember.id);
           expect(searchResult.data.member.name).toBe("Dawit Bekele");
-          expect(searchResult.data.activeMembership.planName).toBe("Monthly Gym & Cardio");
-          expect(searchResult.data.activeMembership.daysRemaining).toBeGreaterThanOrEqual(14);
-          expect(searchResult.data.availableActions).toEqual(["CHECK_IN", "RENEW_EARLY", "UPGRADE"]);
+          expect(searchResult.data.activeMembership.planName).toBe(
+            "Monthly Gym & Cardio",
+          );
+          expect(
+            searchResult.data.activeMembership.daysRemaining,
+          ).toBeGreaterThanOrEqual(14);
+          expect(searchResult.data.availableActions).toEqual([
+            "CHECK_IN",
+            "RENEW_EARLY",
+            "UPGRADE",
+          ]);
         }
       }
     });
@@ -153,10 +167,15 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "EXPIRED") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "EXPIRED"
+        ) {
           expect(searchResult.data.state).toBe("EXPIRED");
           expect(searchResult.data.member.id).toBe(expiredMember.id);
-          expect(searchResult.data.latestMembership.daysExpired).toBeGreaterThanOrEqual(5);
+          expect(
+            searchResult.data.latestMembership.daysExpired,
+          ).toBeGreaterThanOrEqual(5);
           expect(searchResult.data.availableActions).toEqual(["RENEW"]);
         }
       }
@@ -178,10 +197,15 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "NO_MEMBERSHIP") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "NO_MEMBERSHIP"
+        ) {
           expect(searchResult.data.state).toBe("NO_MEMBERSHIP");
           expect(searchResult.data.member.id).toBe(leadUser.id);
-          expect(searchResult.data.availableActions).toEqual(["ASSIGN_MEMBERSHIP"]);
+          expect(searchResult.data.availableActions).toEqual([
+            "ASSIGN_MEMBERSHIP",
+          ]);
         }
       }
     });
@@ -203,10 +227,16 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "BANNED_OR_SUSPENDED") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "BANNED_OR_SUSPENDED"
+        ) {
           expect(searchResult.data.state).toBe("BANNED_OR_SUSPENDED");
           expect(searchResult.data.member.id).toBe(bannedMember.id);
-          expect(searchResult.data.availableActions).toEqual(["NO_ENTRY", "CONTACT_OWNER"]);
+          expect(searchResult.data.availableActions).toEqual([
+            "NO_ENTRY",
+            "CONTACT_OWNER",
+          ]);
         }
       }
     });
@@ -228,7 +258,10 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "ARCHIVED") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "ARCHIVED"
+        ) {
           expect(searchResult.data.state).toBe("ARCHIVED");
           expect(searchResult.data.member.id).toBe(archivedUser.id);
           expect(searchResult.data.availableActions).toEqual(["ENROLL"]);
@@ -265,7 +298,10 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("PHONE_MATCH");
-        if (searchResult.data.type === "PHONE_MATCH" && searchResult.data.state === "EXPIRED") {
+        if (
+          searchResult.data.type === "PHONE_MATCH" &&
+          searchResult.data.state === "EXPIRED"
+        ) {
           expect(searchResult.data.state).toBe("EXPIRED");
           expect(searchResult.data.member.id).toBe(lapsedMember.id);
           expect(searchResult.data.availableActions).toEqual(["RENEW"]);
@@ -276,7 +312,10 @@ describe("Omnibar Search Service Integration Tests", () => {
     test("should enforce multi-tenant isolation: phone in Gym A returns NOT_FOUND when searched in Gym B", async () => {
       // Dawit Bekele exists in primaryGymId (+251911112233)
       // Searching from secondaryGymId must return NOT_FOUND
-      const crossTenantResult = await omnibarSearch(secondaryGymId, "0911112233");
+      const crossTenantResult = await omnibarSearch(
+        secondaryGymId,
+        "0911112233",
+      );
 
       expect(crossTenantResult.ok).toBe(true);
       if (crossTenantResult.ok) {
@@ -298,11 +337,16 @@ describe("Omnibar Search Service Integration Tests", () => {
 
       if (queryLocal.ok && queryIntlNoPlus.ok && queryFullE164.ok) {
         if (
-          queryLocal.data.type === "PHONE_MATCH" && queryLocal.data.state === "ACTIVE" &&
-          queryIntlNoPlus.data.type === "PHONE_MATCH" && queryIntlNoPlus.data.state === "ACTIVE" &&
-          queryFullE164.data.type === "PHONE_MATCH" && queryFullE164.data.state === "ACTIVE"
+          queryLocal.data.type === "PHONE_MATCH" &&
+          queryLocal.data.state === "ACTIVE" &&
+          queryIntlNoPlus.data.type === "PHONE_MATCH" &&
+          queryIntlNoPlus.data.state === "ACTIVE" &&
+          queryFullE164.data.type === "PHONE_MATCH" &&
+          queryFullE164.data.state === "ACTIVE"
         ) {
-          expect(queryLocal.data.member.id).toBe(queryIntlNoPlus.data.member.id);
+          expect(queryLocal.data.member.id).toBe(
+            queryIntlNoPlus.data.member.id,
+          );
           expect(queryLocal.data.member.id).toBe(queryFullE164.data.member.id);
         }
       }
@@ -347,8 +391,13 @@ describe("Omnibar Search Service Integration Tests", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.data.type).toBe("PHONE_MATCH");
-        if (result.data.type === "PHONE_MATCH" && result.data.state === "ACTIVE") {
-          expect(result.data.activeMembership.daysRemaining).toBeGreaterThanOrEqual(39);
+        if (
+          result.data.type === "PHONE_MATCH" &&
+          result.data.state === "ACTIVE"
+        ) {
+          expect(
+            result.data.activeMembership.daysRemaining,
+          ).toBeGreaterThanOrEqual(39);
         }
       }
     });
@@ -363,8 +412,12 @@ describe("Omnibar Search Service Integration Tests", () => {
         expect(nameSearchResult.data.type).toBe("NAME_MATCH");
         if (nameSearchResult.data.type === "NAME_MATCH") {
           expect(nameSearchResult.data.query).toBe("Dawit");
-          expect(nameSearchResult.data.candidates.length).toBeGreaterThanOrEqual(1);
-          const found = nameSearchResult.data.candidates.find((c) => c.name === "Dawit Bekele");
+          expect(
+            nameSearchResult.data.candidates.length,
+          ).toBeGreaterThanOrEqual(1);
+          const found = nameSearchResult.data.candidates.find(
+            (c) => c.name === "Dawit Bekele",
+          );
           expect(found).toBeDefined();
           expect(found!.state).toBe("ACTIVE");
           expect(found!.planName).toBe("Monthly Gym & Cardio");
@@ -379,8 +432,12 @@ describe("Omnibar Search Service Integration Tests", () => {
       if (partialResult.ok) {
         expect(partialResult.data.type).toBe("NAME_MATCH");
         if (partialResult.data.type === "NAME_MATCH") {
-          expect(partialResult.data.candidates.length).toBeGreaterThanOrEqual(1);
-          const dawit = partialResult.data.candidates.find((c) => c.phoneNumber === "+251911112233");
+          expect(partialResult.data.candidates.length).toBeGreaterThanOrEqual(
+            1,
+          );
+          const dawit = partialResult.data.candidates.find(
+            (c) => c.phoneNumber === "+251911112233",
+          );
           expect(dawit).toBeDefined();
           expect(dawit!.name).toBe("Dawit Bekele");
         }
@@ -401,7 +458,11 @@ describe("Omnibar Search Service Integration Tests", () => {
     });
 
     test("should return empty candidate list when no names match query", async () => {
-      const emptyResult = await omnibarSearch(primaryGymId, "NonExistentNameXYZ", 5);
+      const emptyResult = await omnibarSearch(
+        primaryGymId,
+        "NonExistentNameXYZ",
+        5,
+      );
 
       expect(emptyResult.ok).toBe(true);
       if (emptyResult.ok) {
@@ -415,7 +476,11 @@ describe("Omnibar Search Service Integration Tests", () => {
 
     test("should enforce multi-tenant isolation for name searches", async () => {
       // Searching "Dawit" in secondaryGymId must return 0 results
-      const crossTenantNameResult = await omnibarSearch(secondaryGymId, "Dawit", 5);
+      const crossTenantNameResult = await omnibarSearch(
+        secondaryGymId,
+        "Dawit",
+        5,
+      );
 
       expect(crossTenantNameResult.ok).toBe(true);
       if (crossTenantNameResult.ok) {
@@ -450,13 +515,19 @@ describe("Omnibar Search Service Integration Tests", () => {
         status: "expired",
       });
 
-      const searchResult = await omnibarSearch(primaryGymId, "Lapsed Candidate", 5);
+      const searchResult = await omnibarSearch(
+        primaryGymId,
+        "Lapsed Candidate",
+        5,
+      );
 
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok) {
         expect(searchResult.data.type).toBe("NAME_MATCH");
         if (searchResult.data.type === "NAME_MATCH") {
-          const found = searchResult.data.candidates.find((c) => c.id === lapsedCandidate.id);
+          const found = searchResult.data.candidates.find(
+            (c) => c.id === lapsedCandidate.id,
+          );
           expect(found).toBeDefined();
           expect(found!.state).toBe("EXPIRED");
           expect(found!.planName).toBe("Monthly Gym & Cardio");
@@ -482,11 +553,17 @@ describe("Omnibar Search Service Integration Tests", () => {
         },
       ]);
 
-      const searchResult = await omnibarSearch(primaryGymId, "Deterministic", 10);
+      const searchResult = await omnibarSearch(
+        primaryGymId,
+        "Deterministic",
+        10,
+      );
       expect(searchResult.ok).toBe(true);
       if (searchResult.ok && searchResult.data.type === "NAME_MATCH") {
         expect(searchResult.data.candidates.length).toBe(2);
-        expect(searchResult.data.candidates[0].name).toBe("Deterministic Alpha");
+        expect(searchResult.data.candidates[0].name).toBe(
+          "Deterministic Alpha",
+        );
         expect(searchResult.data.candidates[1].name).toBe("Deterministic Beta");
       }
     });
@@ -507,11 +584,20 @@ describe("Omnibar Search Service Integration Tests", () => {
         status: "active",
       });
 
-      const literalUnderscoreResult = await omnibarSearch(primaryGymId, "Spec_Ops", 5);
+      const literalUnderscoreResult = await omnibarSearch(
+        primaryGymId,
+        "Spec_Ops",
+        5,
+      );
       expect(literalUnderscoreResult.ok).toBe(true);
-      if (literalUnderscoreResult.ok && literalUnderscoreResult.data.type === "NAME_MATCH") {
+      if (
+        literalUnderscoreResult.ok &&
+        literalUnderscoreResult.data.type === "NAME_MATCH"
+      ) {
         expect(literalUnderscoreResult.data.candidates.length).toBe(1);
-        expect(literalUnderscoreResult.data.candidates[0].name).toBe("Spec_Ops Member");
+        expect(literalUnderscoreResult.data.candidates[0].name).toBe(
+          "Spec_Ops Member",
+        );
       }
     });
   });
