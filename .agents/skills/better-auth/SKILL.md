@@ -14,6 +14,7 @@ This skill provides full technical documentation, standard operating procedures,
 Better Auth is a modern TypeScript-first authentication framework designed around Web Standard `Request` and `Response` objects.
 
 ### Core Stack Requirements
+
 - **Runtime**: Bun / Node.js (Web Standard APIs)
 - **HTTP Framework**: Hono
 - **ORM / Database**: Drizzle ORM + PostgreSQL
@@ -24,11 +25,13 @@ Better Auth is a modern TypeScript-first authentication framework designed aroun
 ## 2. Drizzle Adapter & Database Schema Rules
 
 ### Package Installation
+
 ```bash
 bun add better-auth @better-auth/drizzle-adapter
 ```
 
 ### Table Pluralization (`usePlural: true`)
+
 By default, Better Auth expects singular table names (`user`, `session`, `account`, `verification`). If your database schema uses plural table names (`users`, `session` or `sessions`, `account` or `accounts`, `verification` or `verifications`), pass `usePlural: true` in the Drizzle adapter options:
 
 ```ts
@@ -46,7 +49,9 @@ export const auth = betterAuth({
 ```
 
 ### Custom Primary Keys (UUID vs Text)
+
 If your `users` table uses PostgreSQL `uuid` for `id` (e.g. `uuid("id").defaultRandom().primaryKey()`), Better Auth supports this provided:
+
 1. `session.userId` in your schema is typed as `uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" })`.
 2. `account.userId` in your schema is typed as `uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" })`.
 3. In `auth.ts`, disable internal string ID generation for the database adapter so PostgreSQL generates the UUID automatically:
@@ -62,6 +67,7 @@ advanced: {
 > **Important**: `session.id`, `account.id`, and `verification.id` remain `text` PKs in Better Auth internal logic. Only `users.id` and the foreign keys referencing `users.id` need to match (`uuid`).
 
 ### Field Mapping (`user.fields`)
+
 If your domain database schema uses different column names than Better Auth defaults (e.g., `phone` instead of `phoneNumber`, `photo_url` instead of `image`), map them in the `user.fields` configuration:
 
 ```ts
@@ -108,13 +114,15 @@ export const auth = betterAuth({
     phoneNumber({
       sendOTP: async ({ phoneNumber, code }, ctx) => {
         // Implement SMS provider logic here (e.g. Twilio, Infobip, SMS gateway)
-        console.log(`[SMS OTP] Send verification code ${code} to ${phoneNumber}`);
+        console.log(
+          `[SMS OTP] Send verification code ${code} to ${phoneNumber}`,
+        );
       },
     }),
   ],
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days
-    updateAge: 60 * 60 * 24 * 1,  // Refresh session expiration daily on activity
+    updateAge: 60 * 60 * 24 * 1, // Refresh session expiration daily on activity
   },
   secret: betterAuthSecret,
   baseURL: betterAuthUrl,
@@ -128,6 +136,7 @@ export const auth = betterAuth({
 Better Auth and Hono both use Web Standard `Request` and `Response` objects. No complex wrapper adapter is required.
 
 ### Mounting Better Auth Handler
+
 In your Hono app:
 
 ```ts
@@ -145,6 +154,7 @@ export default app;
 ```
 
 ### Protecting Hono Routes & Session Access
+
 To retrieve the active session inside Hono route handlers or middleware:
 
 ```ts
@@ -177,6 +187,7 @@ app.use("/api/protected/*", async (c, next) => {
 The Phone Number plugin enables sign up, sign in, and phone verification via OTP (One-Time Password).
 
 ### Server Plugin Setup
+
 ```ts
 import { phoneNumber } from "better-auth/plugins";
 
@@ -187,10 +198,11 @@ phoneNumber({
   signUpOnVerification: {
     getTempEmail: (phoneNumber) => `${phoneNumber}@temp.local`,
   },
-})
+});
 ```
 
 ### Core API Operations
+
 1. **Send OTP Code**: Calls `sendOTP` defined on the server.
 2. **Verify OTP / Sign In**: Verifies the 6-digit code against database verification record and generates session cookie or bearer token.
 3. **Phone Number Schema Requirement**:
@@ -204,18 +216,18 @@ phoneNumber({
 If requests come from mobile apps or non-browser API clients where cookies are not available:
 
 ### Server Setup
+
 ```ts
 import { bearer } from "better-auth/plugins";
 
 export const auth = betterAuth({
   // ...
-  plugins: [
-    bearer(),
-  ],
+  plugins: [bearer()],
 });
 ```
 
 ### Usage
+
 - Client sends header: `Authorization: Bearer <session_token>`
 - Better Auth intercepts the request and verifies the session token automatically.
 
@@ -226,7 +238,15 @@ export const auth = betterAuth({
 Standard Drizzle ORM schema for Better Auth tables when combined with custom application domain logic:
 
 ```ts
-import { pgTable, uuid, text, timestamp, boolean, integer, pgEnum } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  pgEnum,
+} from "drizzle-orm/pg-core";
 
 // --- Domain Tables ---
 export const users = pgTable("users", {
@@ -251,14 +271,18 @@ export const session = pgTable("session", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
 });
 
 export const account = pgTable("account", {
   id: text("id").primaryKey(),
   accountId: text("account_id").notNull(),
   providerId: text("provider_id").notNull(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   idToken: text("id_token"),
