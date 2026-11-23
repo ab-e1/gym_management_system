@@ -1,4 +1,7 @@
-import { createMemberSchema, updateMemberSchema } from "../../../schema/user.schema.ts";
+import {
+  createMemberSchema,
+  updateMemberSchema,
+} from "../../../schema/user.schema.ts";
 import { describe, test, expect } from "bun:test";
 
 describe("user schema unit test", () => {
@@ -82,4 +85,3 @@ describe("user schema unit test", () => {
     expect(result.success).toBe(false);
   });
 });
-

@@ -55,7 +55,9 @@ describe("searchOmnibarSchema Unit Tests", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0].message).toBe("query parameter is required");
+      expect(result.error.issues[0].message).toBe(
+        "query parameter is required",
+      );
     }
   });
 
@@ -66,7 +68,9 @@ describe("searchOmnibarSchema Unit Tests", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0].message).toBe("query must be at least 1 character");
+      expect(result.error.issues[0].message).toBe(
+        "query must be at least 1 character",
+      );
     }
   });
 
@@ -77,7 +81,9 @@ describe("searchOmnibarSchema Unit Tests", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0].message).toBe("query cannot exceed 50 characters");
+      expect(result.error.issues[0].message).toBe(
+        "query cannot exceed 50 characters",
+      );
     }
   });
 

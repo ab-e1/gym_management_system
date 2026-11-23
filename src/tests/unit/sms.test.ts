@@ -103,7 +103,10 @@ describe("SMS Dispatcher & AfroMessage REST Client (Unit)", () => {
     test("should auto-normalize local phone format into E.164 before making request", async () => {
       let capturedBody: Record<string, unknown> | undefined;
       mockFetch(async (_url, init) => {
-        capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        capturedBody = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
         return new Response(
           JSON.stringify({
             acknowledge: "success",
@@ -563,7 +566,12 @@ describe("SMS Dispatcher & AfroMessage REST Client (Unit)", () => {
     });
 
     test("should ignore invalid timeoutMs values (<= 0, NaN, Infinity) and fall back to default 8000ms", async () => {
-      for (const badTimeout of [0, -100, Number.NaN, Number.POSITIVE_INFINITY]) {
+      for (const badTimeout of [
+        0,
+        -100,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+      ]) {
         mockFetch(async () => {
           return new Response(
             JSON.stringify({

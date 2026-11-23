@@ -141,7 +141,15 @@ describe("Auth Zod Schemas Unit Tests", () => {
     });
 
     test("should fail if code is not exactly 6 digits", () => {
-      const invalidLengthCodes = ["1", "12", "123", "1234", "12345", "1234567", "12345678"];
+      const invalidLengthCodes = [
+        "1",
+        "12",
+        "123",
+        "1234",
+        "12345",
+        "1234567",
+        "12345678",
+      ];
       for (const code of invalidLengthCodes) {
         const result = verifyOtpSchema.safeParse({
           gymId: validGymId,
