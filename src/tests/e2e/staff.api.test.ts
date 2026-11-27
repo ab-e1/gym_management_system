@@ -11,6 +11,7 @@ import {
   sessions,
   users,
 } from "../../db/schema.ts";
+import { and, eq } from "drizzle-orm";
 
 describe("Staff API - End-to-End Test Suite", () => {
   // Gym 1 context
@@ -672,6 +673,33 @@ describe("Staff API - End-to-End Test Suite", () => {
       expect(res.status).toBe(200);
       expect(result.ok).toBe(true);
       expect(result.data.message).toBe("Staff member recovered successfully");
+    });
+
+    test("should not let the owner archive their own badge (gym lockout)", async () => {
+      const [ownerBadge] = await connection
+        .select({ id: gymStaff.id })
+        .from(gymStaff)
+        .where(and(eq(gymStaff.userId, ownerId), eq(gymStaff.gymId, gymId)));
+
+      const res = await app.request(`/api/v1/staff/${ownerBadge.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+        },
+      });
+      expect(res.status).toBe(404);
+
+      const [badgeAfter] = await connection
+        .select({ isDeleted: gymStaff.isDeleted })
+        .from(gymStaff)
+        .where(eq(gymStaff.id, ownerBadge.id));
+      expect(badgeAfter.isDeleted).toBe(false);
+
+      // Still logged in: the owner's session was not wiped.
+      const stillWorks = await app.request("/api/v1/staff", {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      });
+      expect(stillWorks.status).toBe(200);
     });
 
     test("should fail with 400 for malformed non-UUID ID", async () => {
