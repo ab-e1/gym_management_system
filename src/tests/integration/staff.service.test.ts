@@ -531,6 +531,36 @@ describe("integration test for the staff services", () => {
       }
     });
 
+    test("promoteMemberToStaff should refuse a banned member with 409 MEMBER_BANNED and create nothing", async () => {
+      const bannedPhone = "+251977445566";
+      const [bannedMember] = await connection
+        .insert(members)
+        .values({
+          gymId,
+          name: "Banned Member",
+          phoneNumber: bannedPhone,
+          status: "banned",
+        })
+        .returning();
+
+      const result = await staffService.promoteMemberToStaff(
+        `${gymId}`,
+        bannedMember.id,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(409);
+      if (!result.ok) {
+        expect(result.error.code).toBe("MEMBER_BANNED");
+      }
+
+      // No login identity (and so no staff badge) was created.
+      const [user] = await connection
+        .select()
+        .from(users)
+        .where(eq(users.phoneNumber, bannedPhone));
+      expect(user).toBeUndefined();
+    });
+
     test("promoteMemberToStaff should fail with 404 for non-existent member ID", async () => {
       const nonExistentPromotionResult =
         await staffService.promoteMemberToStaff(

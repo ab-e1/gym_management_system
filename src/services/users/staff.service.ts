@@ -420,7 +420,13 @@ export const deleteStaffToggle = async (gymId: string, id: string) => {
       isDeleted: gymStaff.isDeleted,
     })
     .from(gymStaff)
-    .where(and(eq(gymStaff.id, id), eq(gymStaff.gymId, gymId)));
+    .where(
+      and(
+        eq(gymStaff.id, id),
+        eq(gymStaff.gymId, gymId),
+        ne(gymStaff.role, "owner"),
+      ),
+    );
 
   if (!targetUser) {
     return {
@@ -498,6 +504,17 @@ export const promoteMemberToStaff = async (
           message: "Member not found with the provided ID",
         },
         status: 404 as ContentfulStatusCode,
+      };
+    }
+
+    if (member.status === "banned") {
+      return {
+        ok: false as const,
+        error: {
+          code: "MEMBER_BANNED",
+          message: "Unban this member before promoting them to staff",
+        },
+        status: 409 as ContentfulStatusCode,
       };
     }
 
