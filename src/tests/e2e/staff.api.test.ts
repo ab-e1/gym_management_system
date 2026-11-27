@@ -551,6 +551,40 @@ describe("Staff API - End-to-End Test Suite", () => {
       expect(result.data.name).toBe("staff updated by owner");
     });
 
+    const patchStaff = (body: unknown) =>
+      app.request(`/api/v1/staff/${staffId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ownerToken}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+    test("should save a role change", async () => {
+      const res = await patchStaff({ role: "coach" });
+      const result = (await res.json()) as any;
+      expect(res.status).toBe(200);
+      expect(result.data.role).toBe("coach");
+
+      await patchStaff({ role: "staff" }); // restore for later tests
+    });
+
+    test("should suspend and then reactivate a staff member", async () => {
+      const suspended = (await (await patchStaff({ status: "suspended" })).json()) as any;
+      expect(suspended.data.status).toBe("suspended");
+
+      const reactivated = (await (await patchStaff({ status: "active" })).json()) as any;
+      expect(reactivated.data.status).toBe("active");
+    });
+
+    test("should reject a status that staff cannot have with 400", async () => {
+      const res = await patchStaff({ status: "banned" });
+      const result = (await res.json()) as any;
+      expect(res.status).toBe(400);
+      expect(result.error.code).toBe("INPUT_VALIDATION_ERROR");
+    });
+
     test("should fail with 400 for malformed non-UUID ID", async () => {
       const res = await app.request("/api/v1/staff/invalid-id-not-uuid", {
         method: "PATCH",

@@ -2,10 +2,8 @@ import * as staffController from "../controllers/staff.controller.ts";
 import { Hono } from "hono";
 import { requiredAuth, requiredRole } from "../middleware/auth.middleware.ts";
 import { validate } from "../middleware/validate.middleware.ts";
-import {
-  createMemberSchema,
-  updateMemberSchema,
-} from "../schema/user.schema.ts";
+import { createMemberSchema } from "../schema/user.schema.ts";
+import { updateStaffSchema } from "../schema/staff.schema.ts";
 import { paginationQuerySchema } from "../schema/common.schema.ts";
 
 const staffRoute = new Hono();
@@ -28,7 +26,7 @@ staffRoute.post("/:id/rehire", staffController.rehireStaff);
 
 staffRoute.patch(
   "/:id",
-  validate(updateMemberSchema),
+  validate(updateStaffSchema),
   staffController.updateStaff,
 );
 

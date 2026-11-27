@@ -7,6 +7,7 @@ import {
   isValidUUID,
   escapeSqlLikePattern,
 } from "../../utils/helpers.ts";
+import type { UpdateStaffInput } from "../../schema/staff.schema.ts";
 
 export const createStaff = async (
   gymId: string,
@@ -311,11 +312,7 @@ export const getStaffById = async (gymId: string, id: string) => {
 export const updateStaff = async (
   gymId: string,
   id: string,
-  data: {
-    name?: string;
-    role?: "staff" | "coach" | "admin";
-    status?: "active" | "suspended" | "inactive";
-  },
+  data: UpdateStaffInput,
 ) => {
   if (!isValidUUID(id)) {
     return {
@@ -377,8 +374,7 @@ export const updateStaff = async (
       badgeUpdates.role = data.role;
     }
     if (data.status !== undefined) {
-      badgeUpdates.status =
-        data.status === "inactive" ? "suspended" : data.status;
+      badgeUpdates.status = data.status;
     }
 
     let updatedBadge = targetBadge;
