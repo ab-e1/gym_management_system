@@ -190,7 +190,7 @@ export const enrollment = async (
     );
 
     if (!paymentResult.ok) {
-      return paymentResult;
+      throw new Error(`Enrollment payment failed: ${paymentResult.error.code}`);
     }
 
     return {
