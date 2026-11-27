@@ -40,7 +40,7 @@ export const requiredAuth = createMiddleware<Env>(
         403 as ContentfulStatusCode,
       );
     }
-    const activeGymId = (session.session as any).activeGymId;
+    const activeGymId = session.session.activeGymId;
     if (!activeGymId) {
       return failure(
         c,
