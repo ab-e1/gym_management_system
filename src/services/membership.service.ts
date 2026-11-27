@@ -1,8 +1,7 @@
 import { and, asc, count, desc, eq, gte, lt, or } from "drizzle-orm";
-import { connection } from "../config/connection.ts";
+import { connection, type DbOrTx } from "../config/connection.ts";
 import { membershipPlans, memberships, members } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { DbOrTx } from "./payment.service.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

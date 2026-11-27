@@ -1,12 +1,8 @@
 import { payments, memberships } from "../db/schema.ts";
-import { connection } from "../config/connection.ts";
+import { connection, type DbOrTx } from "../config/connection.ts";
 import { eq, and } from "drizzle-orm";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { isValidUUID } from "../utils/helpers.ts";
-
-export type DbOrTx =
-  | typeof connection
-  | Parameters<Parameters<typeof connection.transaction>[0]>[0];
 
 export const recordPayment = async (
   gymId: string,
