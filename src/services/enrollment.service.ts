@@ -6,6 +6,10 @@ import { eq, and, ne } from "drizzle-orm";
 import { membershipPlans, members, memberships } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { recordPayment } from "./payment.service.ts";
+import {
+  calculateMembershipEndDate,
+  resolveMembershipStartDate,
+} from "./membership.service.ts";
 
 export const enrollment = async (
   gymId: string,
@@ -154,7 +158,13 @@ export const enrollment = async (
       paymentAmount = planCheck.price;
     }
 
-    const now = new Date();
+    // A returning (archived) member may still have paid days left: stack on them.
+    const startDate = await resolveMembershipStartDate(
+      tx,
+      gymId,
+      memberId,
+      new Date(),
+    );
 
     const [newMembership] = await tx
       .insert(memberships)
@@ -162,14 +172,8 @@ export const enrollment = async (
         gymId: gymId,
         planId: planId,
         memberId: memberId,
-        startDate: now,
-        endDate: (() => {
-          const d = new Date(
-            now.getTime() + planCheck.duration * 24 * 60 * 60 * 1000,
-          );
-          d.setHours(23, 59, 59, 999);
-          return d;
-        })(),
+        startDate,
+        endDate: calculateMembershipEndDate(startDate, planCheck.duration),
       })
       .returning();
 

@@ -2,6 +2,56 @@ import { and, count, desc, eq, gte, lt, or } from "drizzle-orm";
 import { connection } from "../config/connection.ts";
 import { membershipPlans, memberships, members } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { DbOrTx } from "./payment.service.ts";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a new membership starts. If the member still has an active membership,
+ * the new one starts when it ends (renewal stacking), so paid days are never
+ * lost. Otherwise it starts at `requestedStart`.
+ * Used by every path that creates a membership (renewal and enrollment).
+ */
+export const resolveMembershipStartDate = async (
+  db: DbOrTx,
+  gymId: string,
+  memberId: string,
+  requestedStart: Date,
+): Promise<Date> => {
+  const [currentMembership] = await db
+    .select({ endDate: memberships.endDate })
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.memberId, memberId),
+        eq(memberships.gymId, gymId),
+        eq(memberships.status, "active"),
+        gte(memberships.endDate, new Date()),
+        eq(memberships.isDeleted, false),
+      ),
+    )
+    .orderBy(desc(memberships.endDate))
+    .limit(1)
+    .for("update");
+
+  if (currentMembership) {
+    return currentMembership.endDate;
+  }
+  return requestedStart;
+};
+
+/**
+ * A membership ends at the last millisecond of its final day, so the member
+ * keeps access all of that day. "End of day" uses the server's timezone.
+ */
+export const calculateMembershipEndDate = (
+  startDate: Date,
+  durationDays: number,
+): Date => {
+  const endDate = new Date(startDate.getTime() + durationDays * DAY_MS);
+  endDate.setHours(23, 59, 59, 999);
+  return endDate;
+};
 
 export const createMembership = async (
   gymId: string,
@@ -70,37 +120,14 @@ export const createMembership = async (
       };
     }
 
-    const now = new Date();
-
-    // 3. Check for existing active membership for smart renewal stacking
-    const [activeMembership] = await tx
-      .select()
-      .from(memberships)
-      .where(
-        and(
-          eq(memberships.memberId, data.userId),
-          eq(memberships.gymId, gymId),
-          eq(memberships.status, "active"),
-          gte(memberships.endDate, now),
-          eq(memberships.isDeleted, false),
-        ),
-      )
-      .orderBy(desc(memberships.endDate))
-      .for("update");
-
-    let startDate: Date;
-    if (activeMembership) {
-      // Stack renewal onto existing active plan's end date
-      startDate = new Date(activeMembership.endDate);
-    } else {
-      startDate = data.startDate ?? now;
-    }
-
-    // Calculate endDate based on plan duration in days
-    const endDate = new Date(
-      startDate.getTime() + targetPlan.duration * 24 * 60 * 60 * 1000,
+    // 3. Renewal stacking: start after the member's current term, if any
+    const startDate = await resolveMembershipStartDate(
+      tx,
+      gymId,
+      data.userId,
+      data.startDate ?? new Date(),
     );
-    endDate.setHours(23, 59, 59, 999);
+    const endDate = calculateMembershipEndDate(startDate, targetPlan.duration);
     if (targetUser.status === "inactive") {
       await tx
         .update(members)

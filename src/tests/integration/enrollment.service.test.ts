@@ -206,6 +206,44 @@ describe("integration test for the enrollment service", async () => {
     }
   });
 
+  test("should stack a returning member's new term after the days they already paid for", async () => {
+    const [archived] = await connection
+      .insert(members)
+      .values({
+        gymId,
+        name: "Archived With Days Left",
+        phoneNumber: "+251917000111",
+        isDeleted: true,
+      })
+      .returning();
+
+    // Archiving does not cancel memberships: 19 paid days are still left.
+    const paidUntil = new Date(Date.now() + 19 * 24 * 60 * 60 * 1000);
+    await connection.insert(memberships).values({
+      gymId,
+      memberId: archived.id,
+      planId,
+      startDate: new Date(),
+      endDate: paidUntil,
+      status: "active",
+    });
+
+    const result = await enrollment(
+      gymId,
+      staffId,
+      planId,
+      { name: "Archived With Days Left", phoneNumber: "+251917000111" },
+      { amount: 2500, paymentMethod: "cash" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(new Date(result.data.newMembership.startDate).getTime()).toBe(
+        paidUntil.getTime(),
+      );
+    }
+  });
+
   test("test should fail with 403 FORBIDDEN if the member attempting enrollment is banned", async () => {
     await connection.insert(members).values({
       gymId,
