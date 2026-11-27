@@ -1,4 +1,4 @@
-import { connection } from "../../config/connection.ts";
+import { connection, type DbOrTx } from "../../config/connection.ts";
 import { sessions } from "../../db/schema.ts";
 import { expiresIn } from "../../config/auth.ts";
 import crypto from "node:crypto";
@@ -9,8 +9,6 @@ type createSessionParams = {
   ipAddress?: string;
   userAgent?: string;
 };
-type Transaction = Parameters<Parameters<typeof connection.transaction>[0]>[0];
-type DbOrTx = typeof connection | Transaction;
 
 export const insertSession = async (
   params: createSessionParams,

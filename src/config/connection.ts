@@ -30,3 +30,14 @@ if (isTestEnv) {
 
 const queryClient = postgres(selectedUrl || "none");
 export const connection = drizzle(queryClient);
+
+/** A transaction handle: the `tx` inside `connection.transaction(async (tx) => ...)`. */
+export type Transaction = Parameters<
+  Parameters<typeof connection.transaction>[0]
+>[0];
+
+/**
+ * Lets a function run on its own (`connection`) or as one step of a caller's
+ * transaction (`tx`), so its writes commit or roll back with the caller's.
+ */
+export type DbOrTx = typeof connection | Transaction;
