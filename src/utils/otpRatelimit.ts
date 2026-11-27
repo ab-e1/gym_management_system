@@ -1,8 +1,12 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { TrustedProxy } from "../config/env.ts";
 import { normalizePhoneNumber } from "./helpers.ts";
 
 export type OtpRateLimitError =
-  "OTP_COOLDOWN_ACTIVE" | "TOO_MANY_REQUESTS_PHONE" | "TOO_MANY_REQUESTS_IP";
+  | "OTP_COOLDOWN_ACTIVE"
+  | "TOO_MANY_REQUESTS_PHONE"
+  | "TOO_MANY_REQUESTS_IP"
+  | "OTP_SERVICE_BUSY";
 
 type RateLimitResponse =
   | {
@@ -37,22 +41,55 @@ const PHONE_MAX_REQUEST = 4;
 const IP_WINDOW_MS = 15 * 60 * 1000;
 const IP_MAX_REQUEST = 60;
 const CLEAN_INTERVAL = 15 * 60 * 1000;
-const MAX_PHONE_IP_ENTRIES = 10_000;
+// Upper bound on tracked keys per store, so memory stays bounded under a flood.
+// An entry is a key plus at most a handful of timestamps (well under 1 KB), so
+// 50k entries per store is a few MB.
+const MAX_PHONE_IP_ENTRIES = 50_000;
 
 let lastClean = 0;
+
+/** Deletes keys whose newest timestamp has left the window. */
+const sweepStore = (
+  store: Map<string, number[]>,
+  windowMs: number,
+  now: number,
+) => {
+  for (const [key, timestamps] of store) {
+    const hasActive = timestamps.some((t) => now - t < windowMs);
+    if (!hasActive) store.delete(key);
+  }
+};
+
+/**
+ * Makes room for a new key, or reports that there is none.
+ *
+ * Only keys that have already expired are removed. A store that is full of
+ * live keys refuses new ones instead of evicting: evicting a live key would
+ * reset that phone's (or IP's) limit, so an attacker could erase a victim's
+ * cooldown just by flooding the store with junk keys.
+ */
+const hasRoomForNewKey = (
+  store: Map<string, number[]>,
+  windowMs: number,
+  now: number,
+): boolean => {
+  if (store.size < MAX_PHONE_IP_ENTRIES) return true;
+  sweepStore(store, windowMs, now);
+  return store.size < MAX_PHONE_IP_ENTRIES;
+};
 
 export const checkOtpRateLimit = (
   ip: string,
   phone: string,
   now = Date.now(),
 ): RateLimitResponse => {
-  //okay so i guess we have to use in memory like thing for teh rate limiting
-  //and when checking we will need to check the time of the request sent and cooldown time and teh retru after should calculate the now - window
-
+  // Order of checks: (1) per-phone cooldown, (2) per-phone window quota,
+  // (3) per-IP window quota, (4) store capacity. Only a request that passes
+  // all four is recorded.
   const normalizedPhone =
     normalizePhoneNumber(phone) ?? phone.trim().replace(/[\s-]/g, "");
 
-  //check for actIve phone cooldown
+  // Opportunistic cleanup so keys of people who stopped requesting don't pile up.
   if (now - lastClean > CLEAN_INTERVAL) {
     lastClean = now;
     sweepExpiredRateLimits(now);
@@ -76,9 +113,8 @@ export const checkOtpRateLimit = (
     }
   }
 
-  //  check for phone request inside the requesr pool
-  // okay question here should we delete or clear the time stamo other than the filterd one which does the job
-  // this might work we filter the current tiestamps with in teh window and the other will get deleted right , no it wont work this way tho
+  // Sliding window: keep only timestamps still inside the window. Saving this
+  // filtered list back (below) is what drops old timestamps from memory.
   const recentPhoneTimeStamps = phoneTimeStamps.filter(
     (t) => now - t < PHONE_WINDOW_MS,
   );
@@ -98,7 +134,7 @@ export const checkOtpRateLimit = (
       status: 429 as ContentfulStatusCode,
     };
   }
-  //check for ip sliding window
+  // Per-IP window: shields against one source spraying many phone numbers.
   const ipTimeStamps = ipStore.get(ip) ?? [];
   const recentIpTimeStamps = ipTimeStamps.filter((t) => now - t < IP_WINDOW_MS);
 
@@ -119,18 +155,25 @@ export const checkOtpRateLimit = (
     };
   }
 
-  if (phoneStore.size >= MAX_PHONE_IP_ENTRIES) {
-    const oldestKey = phoneStore.keys().next().value;
-    if (oldestKey) {
-      phoneStore.delete(oldestKey);
-    }
+  const storesHaveRoom =
+    (phoneStore.has(normalizedPhone) ||
+      hasRoomForNewKey(phoneStore, PHONE_WINDOW_MS, now)) &&
+    (ipStore.has(ip) || hasRoomForNewKey(ipStore, IP_WINDOW_MS, now));
+
+  if (!storesHaveRoom) {
+    // Fail closed: under a flood we would rather delay new logins briefly
+    // than let anyone's existing limit be erased.
+    return {
+      ok: false as const,
+      error: {
+        code: "OTP_SERVICE_BUSY",
+        message: "OTP service is busy, please try again shortly",
+        retryAfter: PHONE_COOLDOWN_MS / 1000,
+      },
+      status: 503 as ContentfulStatusCode,
+    };
   }
-  if (ipStore.size >= MAX_PHONE_IP_ENTRIES) {
-    const oldestKey = ipStore.keys().next().value;
-    if (oldestKey) {
-      ipStore.delete(oldestKey);
-    }
-  }
+
   recentPhoneTimeStamps.push(now);
   phoneStore.set(normalizedPhone, recentPhoneTimeStamps);
 
@@ -147,36 +190,44 @@ export const checkOtpRateLimit = (
   };
 };
 
-export const resetOtpLimitStore = () => {
+export const resetOtpRateLimitStore = () => {
   phoneStore.clear();
   ipStore.clear();
   lastClean = 0;
 };
 
-export const resetOtpRateLimitStore = resetOtpLimitStore;
-
-// so we need to clear the timestamps o with like a fixed timerate where like so there is no like memory wastage
-// we need to check whether the window has passed since the oldest timestamp if true we call the otpReseter right
-
-export const getClientIp = (headers: Headers): string => {
-  return (
-    // Cloudflare (set by platform, not spoofable)
-    headers.get("cf-connecting-ip") ||
-    // Vercel / standard proxy
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    // Nginx
-    headers.get("x-real-ip") ||
-    "unknown"
-  );
+/**
+ * Resolves the client IP used as the rate-limit key.
+ *
+ * Forwarding headers are only read when a proxy we control sits in front of
+ * the server (see TRUSTED_PROXY in config/env.ts). Otherwise any client could
+ * send a fresh fake IP with every request and never hit the IP limit.
+ */
+export const getClientIp = (
+  headers: Headers,
+  socketAddress: string | undefined,
+  trustedProxy: TrustedProxy,
+): string => {
+  switch (trustedProxy) {
+    case "cloudflare":
+      return headers.get("cf-connecting-ip") ?? socketAddress ?? "unknown";
+    case "reverse-proxy": {
+      // Each proxy APPENDS the address it received the request from, so the
+      // last entry was written by our proxy. Earlier entries came from the
+      // client and can be forged.
+      const forwardedFor = headers
+        .get("x-forwarded-for")
+        ?.split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      return forwardedFor?.at(-1) ?? socketAddress ?? "unknown";
+    }
+    case "none":
+      return socketAddress ?? "unknown";
+  }
 };
 
 export const sweepExpiredRateLimits = (now = Date.now()) => {
-  for (const [phone, timestamps] of phoneStore.entries()) {
-    const hasActive = timestamps.some((t) => now - t < PHONE_WINDOW_MS);
-    if (!hasActive) phoneStore.delete(phone);
-  }
-  for (const [ip, timestamps] of ipStore.entries()) {
-    const hasActive = timestamps.some((t) => now - t < IP_WINDOW_MS);
-    if (!hasActive) ipStore.delete(ip);
-  }
+  sweepStore(phoneStore, PHONE_WINDOW_MS, now);
+  sweepStore(ipStore, IP_WINDOW_MS, now);
 };

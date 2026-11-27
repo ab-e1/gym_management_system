@@ -870,7 +870,10 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       expect(sessionInDb).toBeDefined();
       expect(sessionInDb.userId).toBe(activeStaffUserId);
       expect(sessionInDb.activeGymId).toBe(gym1Id);
-      expect(sessionInDb.ipAddress).toBe("196.188.10.20");
+      // No TRUSTED_PROXY is configured in tests, so the client-supplied
+      // x-forwarded-for must NOT be trusted. app.request() has no TCP socket,
+      // so the resolved IP is "unknown".
+      expect(sessionInDb.ipAddress).toBe("unknown");
       expect(sessionInDb.userAgent).toBe("GymMS-Tablet-App/1.0 (Android)");
     });
   });
