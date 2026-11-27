@@ -22,6 +22,7 @@ import * as otp from "../../utils/otp.ts";
 import { resetOtpRateLimitStore } from "../../utils/otpRatelimit.ts";
 import { eq } from "drizzle-orm";
 import type { TestResponse } from "../../utils/response.ts";
+import { insertSession } from "../../services/auth/session.service.ts";
 
 const getJson = async <T = any>(res: Response): Promise<TestResponse<T>> => {
   return (await res.json()) as TestResponse<T>;
@@ -1040,6 +1041,66 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         expect(member.gymId).toBe(gym1Id);
         expect(member.gymId).not.toBe(gym2Id);
       }
+    });
+  });
+
+  // Better Auth's own endpoints are reachable through the /api/v1/auth/*
+  // catch-all, so they must not let a client write security-relevant fields.
+  describe("Better Auth built-in endpoints (catch-all hardening)", () => {
+    const postAsSession = (path: string, token: string, body: unknown) =>
+      app.request(`/api/v1/auth${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+    test("a banned user cannot un-ban themselves via /update-user", async () => {
+      const { token } = await insertSession({
+        userId: bannedUserId,
+        gymId: gym1Id,
+      });
+
+      const res = await postAsSession("/update-user", token, {
+        status: "active",
+      });
+
+      expect(res.status).toBe(400);
+      const [user] = await connection
+        .select({ status: users.status })
+        .from(users)
+        .where(eq(users.id, bannedUserId));
+      expect(user.status).toBe("banned");
+    });
+
+    test("a session cannot move itself to another gym via /update-session", async () => {
+      const { token, session } = await insertSession({
+        userId: activeStaffUserId,
+        gymId: gym1Id,
+      });
+
+      const res = await postAsSession("/update-session", token, {
+        activeGymId: gym2Id,
+      });
+
+      expect(res.status).toBe(400);
+      const [stored] = await connection
+        .select({ activeGymId: sessions.activeGymId })
+        .from(sessions)
+        .where(eq(sessions.id, session.id));
+      expect(stored.activeGymId).toBe(gym1Id);
+    });
+
+    test("Better Auth's phone-number plugin routes are not exposed", async () => {
+      const res = await app.request("/api/v1/auth/phone-number/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: activeStaffPhone }),
+      });
+
+      expect(res.status).toBe(404);
     });
   });
 });
