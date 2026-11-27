@@ -570,7 +570,7 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
       expect(body.error.code).toBe("TOO_MANY_REQUESTS_IP");
     });
 
-    test("Gateway 502 Failure Cleanup: cleans up verification row if SMS dispatch fails", async () => {
+    test("Gateway Failure: cleans up verification row and answers the generic 200 (no staff enumeration)", async () => {
       smsSpy.mockImplementationOnce(async () => ({
         ok: false,
         error: {
@@ -588,10 +588,12 @@ describe("Auth API (Phone OTP & Session) - End-to-End Test Suite", () => {
         }),
       });
 
-      expect(res.status).toBe(502);
+      // Same answer as for a number that is not staff: no status difference,
+      // and no gateway details reach the client.
+      expect(res.status).toBe(200);
       const body = await getJson(res);
-      expect(body.ok).toBe(false);
-      expect(body.error.code).toBe("GATEWAY_ERROR");
+      expect(body.ok).toBe(true);
+      expect(JSON.stringify(body)).not.toContain("GATEWAY_ERROR");
 
       // Verify orphan OTP record was deleted
       const [record] = await connection
