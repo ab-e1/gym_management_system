@@ -1,6 +1,8 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll, spyOn } from "bun:test";
+import { eq } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
 import { enrollment } from "../../services/enrollment.service.ts";
+import * as paymentModule from "../../services/payment.service.ts";
 import {
   gyms,
   gymStaff,
@@ -241,6 +243,36 @@ describe("integration test for the enrollment service", async () => {
       expect(new Date(result.data.newMembership.startDate).getTime()).toBe(
         paidUntil.getTime(),
       );
+    }
+  });
+
+  test("should roll back the member and membership if recording the payment fails", async () => {
+    // recordPayment can't fail in real use, so force it to.
+    const paymentSpy = spyOn(paymentModule, "recordPayment").mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: "NOT_FOUND", message: "forced failure" },
+      status: 404,
+    });
+
+    try {
+      await expect(
+        enrollment(
+          gymId,
+          staffId,
+          planId,
+          { name: "Rolled Back Member", phoneNumber: "+251916000222" },
+          { amount: 2500, paymentMethod: "cash" },
+        ),
+      ).rejects.toThrow("Enrollment payment failed");
+
+      // Nothing from the failed enrollment was saved.
+      const [member] = await connection
+        .select()
+        .from(members)
+        .where(eq(members.phoneNumber, "+251916000222"));
+      expect(member).toBeUndefined();
+    } finally {
+      paymentSpy.mockRestore();
     }
   });
 
