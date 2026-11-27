@@ -20,7 +20,6 @@
     "@better-auth/drizzle-adapter": "^1.7.3",
     "better-auth": "^1.7.3",
     "drizzle-orm": "^0.45.2",
-    "express": "^5.2.1",
     "hono": "^4.13.7",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
