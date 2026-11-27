@@ -3,6 +3,7 @@ import {
   checkOtpRateLimit,
   resetOtpRateLimitStore,
   sweepExpiredRateLimits,
+  getClientIp,
 } from "../../utils/otpRatelimit.ts";
 
 describe("OTP Rate Limiting Engine (Unit)", () => {
@@ -259,6 +260,76 @@ describe("OTP Rate Limiting Engine (Unit)", () => {
       if (res.ok) {
         expect(res.data.remaining).toBe(3); // 4 max - 1 = 3 remaining
       }
+    });
+  });
+
+  describe("Store capacity (flood resistance)", () => {
+    // Must match MAX_PHONE_IP_ENTRIES in otpRatelimit.ts.
+    const capacity = 50_000;
+    const fillStoreWithJunkKeys = (at: number) => {
+      for (let i = 0; i < capacity; i++) {
+        // A distinct phone AND a distinct IP per request, as an attacker
+        // forging X-Forwarded-For would send.
+        const ip = `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`;
+        checkOtpRateLimit(ip, `+2519${String(10_000_000 + i)}`, at);
+      }
+    };
+
+    test("flooding the store with junk keys does not erase a live cooldown", () => {
+      const baseTime = 1_000_000;
+      const victim = "+251911111111";
+
+      expect(checkOtpRateLimit(defaultIp, victim, baseTime).ok).toBe(true);
+      fillStoreWithJunkKeys(baseTime + 1);
+
+      const retry = checkOtpRateLimit(defaultIp, victim, baseTime + 2);
+      expect(retry.ok).toBe(false);
+      if (!retry.ok) expect(retry.error.code).toBe("OTP_COOLDOWN_ACTIVE");
+    });
+
+    test("a full store of live keys refuses new keys with 503 OTP_SERVICE_BUSY", () => {
+      const baseTime = 1_000_000;
+      fillStoreWithJunkKeys(baseTime);
+
+      const res = checkOtpRateLimit("197.1.1.1", "+251922222222", baseTime + 1);
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.code).toBe("OTP_SERVICE_BUSY");
+        expect(res.status).toBe(503);
+      }
+    });
+
+    test("expired keys are swept to make room once their window has passed", () => {
+      const baseTime = 1_000_000;
+      fillStoreWithJunkKeys(baseTime);
+
+      const afterWindow = baseTime + 15 * 60_000 + 1;
+      const res = checkOtpRateLimit("197.1.1.1", "+251922222222", afterWindow);
+      expect(res.ok).toBe(true);
+    });
+  });
+
+  describe("getClientIp (trusted proxy resolution)", () => {
+    const headers = new Headers({
+      "x-forwarded-for": "6.6.6.6, 203.0.113.7",
+      "cf-connecting-ip": "198.51.100.9",
+    });
+    const socket = "10.0.0.2";
+
+    test("with no trusted proxy, forwarding headers are ignored", () => {
+      expect(getClientIp(headers, socket, "none")).toBe(socket);
+    });
+
+    test("behind Cloudflare, cf-connecting-ip is used", () => {
+      expect(getClientIp(headers, socket, "cloudflare")).toBe("198.51.100.9");
+    });
+
+    test("behind a reverse proxy, the LAST x-forwarded-for entry is used (the first is client-forgeable)", () => {
+      expect(getClientIp(headers, socket, "reverse-proxy")).toBe("203.0.113.7");
+    });
+
+    test("falls back to 'unknown' when nothing identifies the client", () => {
+      expect(getClientIp(new Headers(), undefined, "none")).toBe("unknown");
     });
   });
 });
