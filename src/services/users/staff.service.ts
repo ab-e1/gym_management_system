@@ -18,8 +18,8 @@ export const createStaff = async (
   },
 ) => {
   return await connection.transaction(async (tx) => {
-    const normalizedPhone =
-      normalizePhoneNumber(data.phoneNumber) || data.phoneNumber;
+    // Already normalized by phoneSchema at the request border.
+    const normalizedPhone = data.phoneNumber;
 
     // 1. Guardrail: Check if phone belongs to an active or archived member in this gym
     const [existingMember] = await tx
@@ -107,16 +107,16 @@ export const createStaff = async (
       }
     }
 
-    // 4. Validate email uniqueness globally across `users` (if provided)
-    const normalizedEmail = data.email?.toLowerCase().trim();
-    if (normalizedEmail) {
+    // 4. Validate email uniqueness globally across `users` (if provided).
+    //    Emails arrive trimmed and lowercased (emailSchema).
+    if (data.email) {
       const [duplicateEmail] = await tx
         .select({
           id: users.id,
           email: users.email,
         })
         .from(users)
-        .where(eq(users.email, normalizedEmail));
+        .where(eq(users.email, data.email));
 
       if (
         duplicateEmail &&
@@ -143,7 +143,7 @@ export const createStaff = async (
         .values({
           name: data.name,
           phoneNumber: normalizedPhone,
-          email: normalizedEmail,
+          email: data.email,
         })
         .returning();
       userId = newUser.id;
@@ -168,7 +168,7 @@ export const createStaff = async (
         userId,
         name: data.name,
         phoneNumber: normalizedPhone,
-        email: normalizedEmail ?? null,
+        email: data.email ?? null,
         role: newBadge.role,
         status: newBadge.status,
         isDeleted: newBadge.isDeleted,
@@ -518,8 +518,19 @@ export const promoteMemberToStaff = async (
       };
     }
 
-    let normalizedPhone: any;
-    normalizedPhone = normalizePhoneNumber(member.phoneNumber);
+    // The phone becomes the staff login identity, so it must be valid.
+    const normalizedPhone = normalizePhoneNumber(member.phoneNumber);
+    if (!normalizedPhone) {
+      return {
+        ok: false as const,
+        error: {
+          code: "INVALID_MEMBER_PHONE",
+          message:
+            "Fix this member's phone number before promoting them to staff",
+        },
+        status: 409 as ContentfulStatusCode,
+      };
+    }
 
     // 2. Check if a global user identity exists for this phone number
     const [existingUser] = await tx

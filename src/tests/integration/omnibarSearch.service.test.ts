@@ -568,6 +568,14 @@ describe("Omnibar Search Service Integration Tests", () => {
       }
     });
 
+    test("should fall back to name search (not crash) for digits that are not an Ethiopian phone", async () => {
+      const searchResult = await omnibarSearch(primaryGymId, "1234567890");
+      expect(searchResult.ok).toBe(true);
+      if (searchResult.ok) {
+        expect(searchResult.data.type).toBe("NAME_MATCH");
+      }
+    });
+
     test("should safely treat % and _ as literal characters, not SQL wildcards", async () => {
       // Searching "%" should not match every member in the gym
       const wildcardPercent = await omnibarSearch(primaryGymId, "%", 10);

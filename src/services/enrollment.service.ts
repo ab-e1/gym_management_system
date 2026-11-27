@@ -5,7 +5,6 @@ import { connection } from "../config/connection.ts";
 import { eq, and, ne } from "drizzle-orm";
 import { membershipPlans, members, memberships } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { normalizePhoneNumber } from "../utils/helpers.ts";
 import { recordPayment } from "./payment.service.ts";
 
 export const enrollment = async (
@@ -21,9 +20,9 @@ export const enrollment = async (
 ) => {
   return await connection.transaction(async (tx) => {
     let duplicateEmail: any;
-    let phone: any;
     let paymentAmount: number;
-    phone = normalizePhoneNumber(userData.phoneNumber);
+    // Already normalized by phoneSchema at the request border.
+    const phone = userData.phoneNumber;
     const [planCheck] = await tx
       .select()
       .from(membershipPlans)

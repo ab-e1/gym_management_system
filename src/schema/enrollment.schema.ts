@@ -1,20 +1,12 @@
 import { z } from "zod";
-import { normalizePhoneNumber } from "../utils/helpers.ts";
-
-const ethiopianPhoneRegex = /^(?:\+251|251|0)?[97]\d{8}$/;
+import { phoneSchema, emailSchema } from "./common.schema.ts";
 
 export const enrollmentSchema = z.object({
   planId: z.string().uuid("Invalid plan ID UUID"),
   userData: z.object({
     name: z.string().trim().min(1, "name cannot be empty"),
-    phoneNumber: z
-      .string()
-      .regex(
-        ethiopianPhoneRegex,
-        "phoneNumber must be a valid ethiopian number",
-      )
-      .transform(normalizePhoneNumber),
-    email: z.string().email("invalid email address").optional(),
+    phoneNumber: phoneSchema,
+    email: emailSchema.optional(),
   }),
   paymentData: z.object({
     paymentMethod: z.enum(["cash", "telebirr", "bank"], {

@@ -27,14 +27,12 @@ export const createMember = async (
       )
       .for("update");
 
-    const normalizedEmail = data.email?.toLowerCase().trim();
-    if (normalizedEmail) {
+    // Emails arrive trimmed and lowercased (emailSchema).
+    if (data.email) {
       const [duplicateEmail] = await tx
         .select()
         .from(members)
-        .where(
-          and(eq(members.gymId, gymId), eq(members.email, normalizedEmail)),
-        );
+        .where(and(eq(members.gymId, gymId), eq(members.email, data.email)));
 
       if (
         duplicateEmail &&
@@ -98,7 +96,7 @@ export const createMember = async (
         gymId: gymId,
         name: data.name,
         phoneNumber: data.phoneNumber,
-        email: data.email?.toLowerCase(),
+        email: data.email,
       })
       .returning();
 
@@ -243,11 +241,10 @@ export const updateMember = async (
   }
 
   if (data.email) {
-    const normalizedEmail = data.email.toLowerCase().trim();
     const [duplicateEmail] = await connection
       .select()
       .from(members)
-      .where(and(eq(members.email, normalizedEmail), eq(members.gymId, gymId)));
+      .where(and(eq(members.email, data.email), eq(members.gymId, gymId)));
 
     if (duplicateEmail && duplicateEmail.id !== id) {
       return {
@@ -265,7 +262,7 @@ export const updateMember = async (
     .set({
       name: data.name,
       phoneNumber: data.phoneNumber,
-      email: data.email?.toLowerCase(),
+      email: data.email,
       status: data.status,
     })
     .where(and(eq(members.id, id), eq(members.gymId, gymId)))

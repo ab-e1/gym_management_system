@@ -129,14 +129,11 @@ export const omnibarSearch = async (
   const trimmed = query.trim();
   const cleanedDigits = trimmed.replace(/[\s-]/g, "");
 
-  // Detect Ethiopian or international phone format:
-  // e.g. 09..., 07..., +251..., 251..., or 9-13 pure digits
-  const isPhone =
-    /^(?:\+251|251|0)?[97]\d{8}$/.test(cleanedDigits) ||
-    /^\+?\d{9,13}$/.test(cleanedDigits);
+  // A valid Ethiopian number gets an exact lookup. Anything else (a name,
+  // partial digits) falls through to the search further down.
+  const normalizedPhone = normalizePhoneNumber(cleanedDigits);
 
-  if (isPhone) {
-    const normalizedPhone = normalizePhoneNumber(cleanedDigits)!;
+  if (normalizedPhone) {
 
     // Fast O(1) Unique Index Lookup on (gym_id, phone)
     const [targetUser] = await connection
