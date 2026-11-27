@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import { otpHmacSecret } from "../config/env.ts";
 
 if (!otpHmacSecret) {
-  console.warn("OTP_HMAC_SECRET must be configured");
+  throw new Error("OTP_HMAC_SECRET must be configured");
 }
+const hmacSecret: string = otpHmacSecret; // filtering the thestring response from the undefined one
 
 export const generateOtp = (): string => {
   return crypto.randomInt(100_000, 1_000_000).toString();
@@ -11,7 +12,7 @@ export const generateOtp = (): string => {
 
 export const hashOtp = (otp: string): string => {
   return crypto
-    .createHmac("sha256", otpHmacSecret!)
+    .createHmac("sha256", hmacSecret)
     .update(otp.trim())
     .digest("hex");
 };
