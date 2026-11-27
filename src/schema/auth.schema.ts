@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { normalizePhoneNumber } from "../utils/helpers.ts";
-
-export const ethiopianPhoneRegex = /^(?:\+251|251|0)?[97]\d{8}$/;
+import { phoneSchema } from "./common.schema.ts";
 
 const phonePreprocessor = (val: unknown) => {
   if (typeof val === "object" && val !== null) {
@@ -17,14 +15,7 @@ export const sendOtpSchema = z.preprocess(
   phonePreprocessor,
   z.object({
     gymId: z.string().uuid("Invalid gym ID UUID"),
-    phoneNumber: z
-      .string()
-      .trim()
-      .regex(
-        ethiopianPhoneRegex,
-        "phoneNumber must be a valid Ethiopian phone number (+2519..., +2517..., 09..., 07...)",
-      )
-      .transform((val) => normalizePhoneNumber(val)!),
+    phoneNumber: phoneSchema,
   }),
 );
 
@@ -32,14 +23,7 @@ export const verifyOtpSchema = z.preprocess(
   phonePreprocessor,
   z.object({
     gymId: z.string().uuid("Invalid gym ID UUID"),
-    phoneNumber: z
-      .string()
-      .trim()
-      .regex(
-        ethiopianPhoneRegex,
-        "phoneNumber must be a valid Ethiopian phone number (+2519..., +2517..., 09..., 07...)",
-      )
-      .transform((val) => normalizePhoneNumber(val)!),
+    phoneNumber: phoneSchema,
     code: z
       .string()
       .trim()

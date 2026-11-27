@@ -318,6 +318,30 @@ describe("Enrollment API E2E Tests (/api/v1/enrollment)", () => {
       expect(phoneConflictError.ok).toBe(false);
       expect(phoneConflictError.error.code).toBe("CONFLICT");
     });
+
+    test("POST /api/v1/enrollment should treat emails that differ only in case as the same email", async () => {
+      const enroll = (phoneNumber: string, email: string) =>
+        app.request("/api/v1/enrollment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${staffToken}`,
+          },
+          body: JSON.stringify({
+            planId,
+            userData: { name: "Case Test", phoneNumber, email },
+            paymentData: { paymentMethod: "cash" },
+          }),
+        });
+
+      const first = await enroll("0911777001", "Case.Test@Gmail.com");
+      expect(first.status).toBe(201);
+      const firstBody = (await first.json()) as any;
+      expect(firstBody.data.newMember.email).toBe("case.test@gmail.com");
+
+      const second = await enroll("0911777002", "case.test@gmail.com");
+      expect(second.status).toBe(409);
+    });
   });
 
   describe("Successful Atomic Enrollment (201 CREATED)", () => {

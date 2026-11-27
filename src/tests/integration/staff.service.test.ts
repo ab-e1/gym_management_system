@@ -561,6 +561,28 @@ describe("integration test for the staff services", () => {
       expect(user).toBeUndefined();
     });
 
+    test("promoteMemberToStaff should refuse a member whose stored phone is invalid with 409 INVALID_MEMBER_PHONE", async () => {
+      const [badPhoneMember] = await connection
+        .insert(members)
+        .values({
+          gymId,
+          name: "Bad Phone Member",
+          phoneNumber: "12345",
+          status: "active",
+        })
+        .returning();
+
+      const result = await staffService.promoteMemberToStaff(
+        `${gymId}`,
+        badPhoneMember.id,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(409);
+      if (!result.ok) {
+        expect(result.error.code).toBe("INVALID_MEMBER_PHONE");
+      }
+    });
+
     test("promoteMemberToStaff should fail with 404 for non-existent member ID", async () => {
       const nonExistentPromotionResult =
         await staffService.promoteMemberToStaff(
