@@ -1,7 +1,7 @@
 import { connection } from "../../config/connection.ts";
 import { sessions, users, gymStaff, members } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq, and, count, or, ilike, sql, ne } from "drizzle-orm";
+import { eq, and, asc, count, desc, or, ilike, sql, ne } from "drizzle-orm";
 import {
   normalizePhoneNumber,
   isValidUUID,
@@ -235,6 +235,8 @@ export const getAllStaff = async (
     .from(gymStaff)
     .innerJoin(users, eq(gymStaff.userId, users.id))
     .where(filterCondition)
+    // Newest first; id breaks ties so pages never repeat or skip rows.
+    .orderBy(desc(gymStaff.createdAt), asc(gymStaff.id))
     .limit(limit)
     .offset(offset);
 

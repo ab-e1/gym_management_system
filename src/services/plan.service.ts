@@ -1,7 +1,7 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { connection } from "../config/connection.ts";
 import { membershipPlans } from "../db/schema.ts";
-import { and, count, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 
 export const createPlan = async (
   gymId: string,
@@ -91,6 +91,8 @@ export const getAllPlans = async (
     .select()
     .from(membershipPlans)
     .where(condition)
+    // Newest first; id breaks ties so pages never repeat or skip rows.
+    .orderBy(desc(membershipPlans.createdAt), asc(membershipPlans.id))
     .limit(limit)
     .offset(offset);
 
