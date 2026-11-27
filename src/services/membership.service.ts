@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, or } from "drizzle-orm";
 import { connection } from "../config/connection.ts";
 import { membershipPlans, memberships, members } from "../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -248,7 +248,8 @@ export const getAllMemberships = async (
       ),
     )
     .where(filterCondition)
-    .orderBy(desc(memberships.createdAt))
+    // Newest first; id breaks ties so pages never repeat or skip rows.
+    .orderBy(desc(memberships.createdAt), asc(memberships.id))
     .limit(limit)
     .offset(offset);
 

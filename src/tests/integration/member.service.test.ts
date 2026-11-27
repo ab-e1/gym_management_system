@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
+import { eq } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
 import * as userService from "../../services/users/member.service.ts";
 import {
@@ -404,5 +405,40 @@ describe("integration test for member services", () => {
       expect(updateResult.status).toBe(409);
       expect(updateResult.error.code).toBe("CONFLICT");
     }
+  });
+
+  test("paging through members returns every member exactly once, even if one is edited mid-way", async () => {
+    const [pagingGym] = await connection
+      .insert(gyms)
+      .values({ name: "Paging Gym", slug: "paging_gym" })
+      .returning();
+
+    // One insert = one transaction, so all six get the SAME createdAt:
+    // only the id tiebreaker decides their order.
+    const inserted = await connection
+      .insert(members)
+      .values(
+        [1, 2, 3, 4, 5, 6].map((n) => ({
+          gymId: pagingGym.id,
+          name: `Paging Member ${n}`,
+          phoneNumber: `+25191100000${n}`,
+        })),
+      )
+      .returning({ id: members.id });
+
+    const page1 = await userService.getAllMembers(pagingGym.id, 1, 2);
+
+    // Edit a member already shown: Postgres writes a new row version,
+    // which changes the physical row order on disk.
+    await connection
+      .update(members)
+      .set({ name: "Edited Between Pages" })
+      .where(eq(members.id, page1.data[0].id));
+
+    const page2 = await userService.getAllMembers(pagingGym.id, 2, 2);
+    const page3 = await userService.getAllMembers(pagingGym.id, 3, 2);
+
+    const seenIds = [...page1.data, ...page2.data, ...page3.data].map((m) => m.id);
+    expect(seenIds.sort()).toEqual(inserted.map((m) => m.id).sort());
   });
 });

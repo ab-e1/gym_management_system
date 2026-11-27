@@ -1,4 +1,4 @@
-import { and, count, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
 import { connection } from "../../config/connection.ts";
 import { members } from "../../db/schema.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -147,6 +147,8 @@ export const getAllMembers = async (
     .select()
     .from(members)
     .where(filterCondition)
+    // Newest first; id breaks ties so pages never repeat or skip rows.
+    .orderBy(desc(members.createdAt), asc(members.id))
     .limit(limit)
     .offset(offset);
   const totalCount = Number(total);
