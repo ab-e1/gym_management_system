@@ -3,7 +3,11 @@ import * as otp from "../../utils/otp.ts";
 import { sendSms } from "../../utils/sms.ts";
 import { gymStaff, users, verifications } from "../../db/schema.ts";
 import { connection } from "../../config/connection.ts";
-import { normalizePhoneNumber, formatOtpMessage } from "../../utils/helpers.ts";
+import {
+  normalizePhoneNumber,
+  formatOtpMessage,
+  maskPhone,
+} from "../../utils/helpers.ts";
 import { eq, and } from "drizzle-orm";
 import { insertSession } from "./session.service.ts";
 
@@ -114,14 +118,9 @@ export const sendOtp = async (gymId: string, phone: string) => {
       .delete(verifications)
       .where(eq(verifications.identifier, normalizedPhone));
 
-    return {
-      ok: false as const,
-      error: {
-        code: result.error.code,
-        message: result.error.message,
-      },
-      status: 502 as ContentfulStatusCode,
-    };
+    console.error(
+      `[SendOtp] SMS failed for ${maskPhone(normalizedPhone)} due to ${result.error.code}, message : ${result.error.message}`,
+    );
   }
 
   return SUCCESS_RESPONSE;

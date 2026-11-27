@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach, mock, spyOn } from "bun:test";
 import * as otp from "../../utils/otp.ts";
 import type { SmsResult } from "../../utils/sms.ts";
 
@@ -296,7 +296,7 @@ describe("Auth Service - sendOtp Unit & Security Suite", () => {
       ];
     });
 
-    test("should return 502 Bad Gateway when SMS dispatch fails", async () => {
+    test("should answer the generic 200 and log the failure when SMS dispatch fails", async () => {
       sendSmsMock = mock(async (_phone?: string, _message?: string): Promise<SmsResult> => {
         return {
           ok: false as const,
@@ -306,19 +306,24 @@ describe("Auth Service - sendOtp Unit & Security Suite", () => {
           },
         };
       });
+      const errorLog = spyOn(console, "error").mockImplementation(() => {});
 
-      const res = await sendOtp(validGymId, validPhone);
+      try {
+        const res = await sendOtp(validGymId, validPhone);
 
-      expect(res.ok).toBe(false);
-      expect(res.status).toBe(502);
-      if (!res.ok) {
-        expect(res.error.code).toBe("GATEWAY_ERROR");
-        expect(res.error.message).toBe(
-          "AfroMessage upstream connection timeout",
-        );
+        // Same answer as for a number that is not staff (anti-enumeration).
+        expect(res.ok).toBe(true);
+        expect(res.status).toBe(200);
+        // Verify orphaned verification row was burned on SMS failure
+        expect(mockVerifications.length).toBe(0);
+
+        // Operators can see what failed, without the full phone number.
+        const logLine = String(errorLog.mock.calls[0]?.[0]);
+        expect(logLine).toContain("GATEWAY_ERROR");
+        expect(logLine).not.toContain(validPhone);
+      } finally {
+        errorLog.mockRestore();
       }
-      // Verify orphaned verification row was burned on SMS failure
-      expect(mockVerifications.length).toBe(0);
     });
   });
 });

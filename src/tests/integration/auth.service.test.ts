@@ -510,7 +510,7 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
       expect(dbVerification).toBeUndefined();
     });
 
-    test("Orphan OTP Cleanup: should delete inserted verification row and return 502 when SMS gateway fails", async () => {
+    test("Orphan OTP Cleanup: should delete inserted verification row and still answer the generic 200 when SMS gateway fails", async () => {
       smsSpy.mockResolvedValueOnce({
         ok: false,
         error: {
@@ -521,14 +521,9 @@ describe("Auth & Session Service Real Database Integration Suite", () => {
 
       const res = await sendOtp(gymId, activeUserPhone);
 
-      expect(res.ok).toBe(false);
-      expect(res.status).toBe(502);
-      if (!res.ok) {
-        expect(res.error.code).toBe("GATEWAY_ERROR");
-        expect(res.error.message).toBe(
-          "AfroMessage upstream gateway connection timeout",
-        );
-      }
+      // Same answer as for a number that is not staff (anti-enumeration).
+      expect(res.ok).toBe(true);
+      expect(res.status).toBe(200);
 
       // Crucial security invariant: No orphan OTP remains in PostgreSQL
       const [dbVerification] = await connection
